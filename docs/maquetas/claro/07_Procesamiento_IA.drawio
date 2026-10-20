@@ -1,0 +1,68 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<mxfile host="app.diagrams.net" modified="2026-10-19T20:00:00.000Z" agent="Quizly" version="24.7.17" type="device">
+  <diagram id="quizly-7" name="07_Procesamiento_IA">
+    <mxGraphModel dx="950" dy="950" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="430" pageHeight="830" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="2" value="" style="rounded=0;arcSize=0;whiteSpace=wrap;html=1;fillColor=#F3F6FC;strokeColor=none;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="0" y="0" width="390" height="800" as="geometry"/>
+        </mxCell>
+        <mxCell id="3" value="" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B8C6D9;strokeWidth=2;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="16" y="16" width="358" height="768" as="geometry"/>
+        </mxCell>
+        <mxCell id="4" value="9:41" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#162339;fontSize=13;fontStyle=1;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="35" y="31" width="80" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="5" value="●  ◢  ▰" style="text;html=1;align=right;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#162339;fontSize=12;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="276" y="31" width="79" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="6" value="Generando con IA" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#162339;fontSize=24;fontStyle=1;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="35" y="70" width="320" height="43" as="geometry"/>
+        </mxCell>
+        <mxCell id="7" value="Estamos creando tu&#10;cuestionario" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#162339;fontSize=23;fontStyle=1;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="43" y="168" width="304" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="8" value="Esto puede tardar unos segundos..." style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#536780;fontSize=13;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="42" y="241" width="306" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="9" value="" style="rounded=1;arcSize=45;whiteSpace=wrap;html=1;fillColor=#F3EAFE;strokeColor=#7950CC;strokeWidth=3;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="123" y="302" width="144" height="144" as="geometry"/>
+        </mxCell>
+        <mxCell id="10" value="✦" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#7950CC;fontSize=64;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="141" y="338" width="109" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="11" value="✓" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#16865F;fontSize=22;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="48" y="482" width="30" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="12" value="Analizando archivos" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#162339;fontSize=14;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="85" y="482" width="249" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="13" value="✓" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#16865F;fontSize=22;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="48" y="528" width="30" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="14" value="Detectando temas" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#162339;fontSize=14;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="85" y="528" width="249" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="15" value="◉" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#7950CC;fontSize=22;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="48" y="574" width="30" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="16" value="Generando preguntas" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#162339;fontSize=14;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="85" y="574" width="249" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="17" value="○" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#536780;fontSize=22;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="48" y="620" width="30" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="18" value="Validando respuestas" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#162339;fontSize=14;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="85" y="620" width="249" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="19" value="" style="rounded=1;arcSize=19;whiteSpace=wrap;html=1;fillColor=#F6F0FF;strokeColor=none;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="702" width="310" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="20" value="Las preguntas se basan en tus archivos." style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#62479B;fontSize=12;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="51" y="707" width="288" height="39" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

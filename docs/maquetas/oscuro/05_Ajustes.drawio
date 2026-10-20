@@ -1,0 +1,71 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<mxfile host="app.diagrams.net" modified="2026-10-19T20:00:00.000Z" agent="Quizly" version="24.7.17" type="device">
+  <diagram id="quizly-1" name="05_Ajustes">
+    <mxGraphModel dx="950" dy="950" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="430" pageHeight="830" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="2" value="" style="rounded=0;arcSize=0;whiteSpace=wrap;html=1;fillColor=#0B1020;strokeColor=none;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="0" y="0" width="390" height="800" as="geometry"/>
+        </mxCell>
+        <mxCell id="3" value="" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#0D1422;strokeColor=#718098;strokeWidth=2;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="16" y="16" width="358" height="768" as="geometry"/>
+        </mxCell>
+        <mxCell id="4" value="9:41" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=13;fontStyle=1;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="35" y="31" width="80" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="5" value="●  ◢  ▰" style="text;html=1;align=right;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=12;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="276" y="31" width="79" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="6" value="←" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=26;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="31" y="69" width="45" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="7" value="Ajustes" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=24;fontStyle=1;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="80" y="70" width="230" height="43" as="geometry"/>
+        </mxCell>
+        <mxCell id="8" value="" style="rounded=1;arcSize=20;whiteSpace=wrap;html=1;fillColor=#141D30;strokeColor=#34445F;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="35" y="158" width="320" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="9" value="☼   Tema de la aplicación" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=15;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="50" y="171" width="235" height="33" as="geometry"/>
+        </mxCell>
+        <mxCell id="10" value="Oscuro" style="text;html=1;align=right;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#A2B2CD;fontSize=12;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="284" y="171" width="51" height="33" as="geometry"/>
+        </mxCell>
+        <mxCell id="11" value="" style="rounded=1;arcSize=20;whiteSpace=wrap;html=1;fillColor=#141D30;strokeColor=#34445F;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="35" y="230" width="320" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="12" value="◎   Idioma" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=15;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="50" y="243" width="235" height="33" as="geometry"/>
+        </mxCell>
+        <mxCell id="13" value="Español" style="text;html=1;align=right;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#A2B2CD;fontSize=12;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="284" y="243" width="51" height="33" as="geometry"/>
+        </mxCell>
+        <mxCell id="14" value="" style="rounded=1;arcSize=20;whiteSpace=wrap;html=1;fillColor=#141D30;strokeColor=#34445F;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="35" y="302" width="320" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="15" value="?   Ayuda y soporte" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=15;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="50" y="315" width="235" height="33" as="geometry"/>
+        </mxCell>
+        <mxCell id="16" value="›" style="text;html=1;align=right;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#A2B2CD;fontSize=12;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="284" y="315" width="51" height="33" as="geometry"/>
+        </mxCell>
+        <mxCell id="17" value="" style="rounded=1;arcSize=20;whiteSpace=wrap;html=1;fillColor=#141D30;strokeColor=#34445F;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="35" y="374" width="320" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="18" value="ⓘ   Acerca de Quizly" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=15;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="50" y="387" width="235" height="33" as="geometry"/>
+        </mxCell>
+        <mxCell id="19" value="›" style="text;html=1;align=right;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#A2B2CD;fontSize=12;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="284" y="387" width="51" height="33" as="geometry"/>
+        </mxCell>
+        <mxCell id="20" value="" style="rounded=1;arcSize=22;whiteSpace=wrap;html=1;fillColor=#261825;strokeColor=#FF6177;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="545" width="310" height="51" as="geometry"/>
+        </mxCell>
+        <mxCell id="21" value="Cerrar sesión" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#FF6177;fontSize=16;fontStyle=1;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="49" y="555" width="292" height="28" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

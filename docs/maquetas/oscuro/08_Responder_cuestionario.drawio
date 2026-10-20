@@ -1,0 +1,98 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<mxfile host="app.diagrams.net" modified="2026-10-19T20:00:00.000Z" agent="Quizly" version="24.7.17" type="device">
+  <diagram id="quizly-1" name="08_Responder_cuestionario">
+    <mxGraphModel dx="950" dy="950" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="430" pageHeight="830" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="2" value="" style="rounded=0;arcSize=0;whiteSpace=wrap;html=1;fillColor=#0B1020;strokeColor=none;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="0" y="0" width="390" height="800" as="geometry"/>
+        </mxCell>
+        <mxCell id="3" value="" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#0D1422;strokeColor=#718098;strokeWidth=2;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="16" y="16" width="358" height="768" as="geometry"/>
+        </mxCell>
+        <mxCell id="4" value="9:41" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=13;fontStyle=1;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="35" y="31" width="80" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="5" value="●  ◢  ▰" style="text;html=1;align=right;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=12;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="276" y="31" width="79" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="6" value="←" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=26;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="31" y="69" width="45" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="7" value="Quizly" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=24;fontStyle=1;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="80" y="70" width="230" height="43" as="geometry"/>
+        </mxCell>
+        <mxCell id="8" value="Pregunta 3 de 10" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=16;fontStyle=1;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="40" y="146" width="220" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="9" value="30%" style="text;html=1;align=right;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#A2B2CD;fontSize=14;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="291" y="146" width="57" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="10" value="" style="rounded=1;arcSize=56;whiteSpace=wrap;html=1;fillColor=#1A263B;strokeColor=none;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="189" width="310" height="9" as="geometry"/>
+        </mxCell>
+        <mxCell id="11" value="" style="rounded=1;arcSize=56;whiteSpace=wrap;html=1;fillColor=#37D88D;strokeColor=none;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="189" width="93" height="9" as="geometry"/>
+        </mxCell>
+        <mxCell id="12" value="" style="rounded=1;arcSize=4;whiteSpace=wrap;html=1;fillColor=#141D30;strokeColor=#34445F;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="35" y="232" width="320" height="375" as="geometry"/>
+        </mxCell>
+        <mxCell id="13" value="¿Cuál fue la causa principal&#10;de la Revolución Francesa?" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=19;fontStyle=1;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="55" y="252" width="280" height="89" as="geometry"/>
+        </mxCell>
+        <mxCell id="14" value="" style="rounded=1;arcSize=20;whiteSpace=wrap;html=1;fillColor=#133F62;strokeColor=#269AF4;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="52" y="350" width="286" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="15" value="◉" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#269AF4;fontSize=18;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="60" y="357" width="34" height="31" as="geometry"/>
+        </mxCell>
+        <mxCell id="16" value="A) La escasez de alimentos" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=13;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="91" y="356" width="241" height="31" as="geometry"/>
+        </mxCell>
+        <mxCell id="17" value="" style="rounded=1;arcSize=20;whiteSpace=wrap;html=1;fillColor=#1A263B;strokeColor=#34445F;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="52" y="406" width="286" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="18" value="○" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#A2B2CD;fontSize=18;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="60" y="413" width="34" height="31" as="geometry"/>
+        </mxCell>
+        <mxCell id="19" value="B) La invasión extranjera" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=13;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="91" y="412" width="241" height="31" as="geometry"/>
+        </mxCell>
+        <mxCell id="20" value="" style="rounded=1;arcSize=20;whiteSpace=wrap;html=1;fillColor=#1A263B;strokeColor=#34445F;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="52" y="462" width="286" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="21" value="○" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#A2B2CD;fontSize=18;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="60" y="469" width="34" height="31" as="geometry"/>
+        </mxCell>
+        <mxCell id="22" value="C) El avance tecnológico" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=13;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="91" y="468" width="241" height="31" as="geometry"/>
+        </mxCell>
+        <mxCell id="23" value="" style="rounded=1;arcSize=20;whiteSpace=wrap;html=1;fillColor=#1A263B;strokeColor=#34445F;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="52" y="518" width="286" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="24" value="○" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#A2B2CD;fontSize=18;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="60" y="525" width="34" height="31" as="geometry"/>
+        </mxCell>
+        <mxCell id="25" value="D) La reforma religiosa" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=13;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="91" y="524" width="241" height="31" as="geometry"/>
+        </mxCell>
+        <mxCell id="26" value="" style="rounded=1;arcSize=23;whiteSpace=wrap;html=1;fillColor=#1A263B;strokeColor=none;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="644" width="143" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="27" value="Anterior" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=15;fontStyle=1;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="47" y="648" width="129" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="28" value="" style="rounded=1;arcSize=23;whiteSpace=wrap;html=1;fillColor=#269AF4;strokeColor=none;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="194" y="644" width="156" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="29" value="Siguiente" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=15;fontStyle=1;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="201" y="648" width="142" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="30" value="Guardar progreso" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#269AF4;fontSize=14;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="72" y="710" width="248" height="30" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

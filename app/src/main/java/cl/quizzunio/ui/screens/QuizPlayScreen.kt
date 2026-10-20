@@ -1,0 +1,303 @@
+package cl.quizzunio.ui.screens
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import cl.quizzunio.ui.theme.QuizzunioTheme
+import cl.quizzunio.ui.theme.extendedColors
+
+/**
+ * Pantalla 08: Responder Cuestionario
+ * Maqueta: docs/maquetas/claro/08_Responder_cuestionario.drawio y docs/maquetas/oscuro/08_Responder_cuestionario.drawio
+ */
+@Composable
+fun QuizPlayScreen(
+    onBackClick: () -> Unit = {},
+    onFinishQuiz: () -> Unit = {}
+) {
+    var selectedOptionIndex by remember { mutableIntStateOf(0) }
+    var currentQuestionIndex by remember { mutableIntStateOf(3) }
+    val totalQuestions = 10
+
+    val options = listOf(
+        "A) La escasez de alimentos",
+        "B) La invasión extranjera",
+        "C) El avance tecnológico",
+        "D) La reforma religiosa"
+    )
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBackClick) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Volver",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+
+                Text(
+                    text = "Quizzunio",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                // Progreso
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Pregunta $currentQuestionIndex de $totalQuestions",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+
+                    val progressPercent = (currentQuestionIndex * 100) / totalQuestions
+                    Text(
+                        text = "$progressPercent%",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 14.sp
+                        ),
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Barra de progreso
+                LinearProgressIndicator(
+                    progress = { currentQuestionIndex.toFloat() / totalQuestions },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp),
+                    color = MaterialTheme.extendedColors.success,
+                    trackColor = MaterialTheme.colorScheme.secondaryContainer
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Tarjeta principal de la pregunta
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp)
+                    ) {
+                        Text(
+                            text = "¿Cuál fue la causa principal de la Revolución Francesa?",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                lineHeight = 26.sp
+                            ),
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        // Opciones de respuesta
+                        options.forEachIndexed { index, optionText ->
+                            val isSelected = selectedOptionIndex == index
+
+                            val cardBg = if (isSelected) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.secondaryContainer
+                            }
+
+                            val borderStroke = if (isSelected) {
+                                BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+                            } else {
+                                BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                            }
+
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp)
+                                    .clickable { selectedOptionIndex = index },
+                                shape = RoundedCornerShape(12.dp),
+                                border = borderStroke,
+                                colors = CardDefaults.cardColors(
+                                    containerColor = cardBg
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = if (isSelected) "◉" else "○",
+                                        fontSize = 18.sp,
+                                        color = if (isSelected) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.secondary
+                                        },
+                                        modifier = Modifier.padding(end = 12.dp)
+                                    )
+
+                                    Text(
+                                        text = optionText,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontSize = 13.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        ),
+                                        color = MaterialTheme.colorScheme.onBackground
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Botones inferiores de navegación
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            if (currentQuestionIndex > 1) currentQuestionIndex--
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    ) {
+                        Text(
+                            text = "Anterior",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            if (currentQuestionIndex < totalQuestions) {
+                                currentQuestionIndex++
+                            } else {
+                                onFinishQuiz()
+                            }
+                        },
+                        modifier = Modifier
+                            .weight(1.2f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    ) {
+                        Text(
+                            text = if (currentQuestionIndex == totalQuestions) "Finalizar" else "Siguiente",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = "Guardar progreso",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 14.sp
+                    ),
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable { /* Guardar */ }
+                )
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun QuizPlayScreenPreview() {
+    QuizzunioTheme {
+        QuizPlayScreen()
+    }
+}

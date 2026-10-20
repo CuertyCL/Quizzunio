@@ -1,0 +1,80 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<mxfile host="app.diagrams.net" modified="2026-10-19T20:00:00.000Z" agent="Quizly" version="24.7.17" type="device">
+  <diagram id="quizly-1" name="03_Registrarse">
+    <mxGraphModel dx="950" dy="950" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="430" pageHeight="830" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="2" value="" style="rounded=0;arcSize=0;whiteSpace=wrap;html=1;fillColor=#0B1020;strokeColor=none;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="0" y="0" width="390" height="800" as="geometry"/>
+        </mxCell>
+        <mxCell id="3" value="" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#0D1422;strokeColor=#718098;strokeWidth=2;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="16" y="16" width="358" height="768" as="geometry"/>
+        </mxCell>
+        <mxCell id="4" value="9:41" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=13;fontStyle=1;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="35" y="31" width="80" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="5" value="●  ◢  ▰" style="text;html=1;align=right;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=12;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="276" y="31" width="79" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="6" value="Quizly" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=24;fontStyle=1;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="35" y="70" width="320" height="43" as="geometry"/>
+        </mxCell>
+        <mxCell id="7" value="Crea tu cuenta" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=23;fontStyle=1;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="41" y="143" width="308" height="39" as="geometry"/>
+        </mxCell>
+        <mxCell id="8" value="Empieza a estudiar con Quizly" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#A2B2CD;fontSize=14;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="38" y="181" width="314" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="9" value="" style="rounded=1;arcSize=19;whiteSpace=wrap;html=1;fillColor=#141D30;strokeColor=#34445F;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="256" width="310" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="10" value="♙" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#A2B2CD;fontSize=17;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="51" y="267" width="30" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="11" value="Nombre de usuario" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#A2B2CD;fontSize=13;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="85" y="267" width="246" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="12" value="" style="rounded=1;arcSize=19;whiteSpace=wrap;html=1;fillColor=#141D30;strokeColor=#34445F;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="318" width="310" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="13" value="✉" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#A2B2CD;fontSize=17;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="51" y="329" width="30" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="14" value="Correo electrónico" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#A2B2CD;fontSize=13;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="85" y="329" width="246" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="15" value="" style="rounded=1;arcSize=19;whiteSpace=wrap;html=1;fillColor=#141D30;strokeColor=#34445F;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="380" width="310" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="16" value="⌑" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#A2B2CD;fontSize=17;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="51" y="391" width="30" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="17" value="Contraseña" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#A2B2CD;fontSize=13;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="85" y="391" width="246" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="18" value="" style="rounded=1;arcSize=19;whiteSpace=wrap;html=1;fillColor=#141D30;strokeColor=#34445F;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="442" width="310" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="19" value="⌑" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#A2B2CD;fontSize=17;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="51" y="453" width="30" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="20" value="Confirmar contraseña" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#A2B2CD;fontSize=13;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="85" y="453" width="246" height="26" as="geometry"/>
+        </mxCell>
+        <mxCell id="21" value="La contraseña debe ser segura" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#A2B2CD;fontSize=12;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="40" y="506" width="310" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="22" value="" style="rounded=1;arcSize=23;whiteSpace=wrap;html=1;fillColor=#269AF4;strokeColor=none;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="567" width="310" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="23" value="Registrarse" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#F7FAFF;fontSize=15;fontStyle=1;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="47" y="571" width="296" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="24" value="¿Ya tienes cuenta? Inicia sesión" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=none;fillColor=none;fontFamily=Arial;fontColor=#A2B2CD;fontSize=14;fontStyle=0;spacing=0;overflow=hidden;" vertex="1" parent="1">
+          <mxGeometry x="45" y="637" width="300" height="35" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
