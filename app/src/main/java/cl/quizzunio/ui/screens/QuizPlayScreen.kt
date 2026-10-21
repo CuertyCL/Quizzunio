@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -49,15 +50,16 @@ fun QuizPlayScreen(
     onBackClick: () -> Unit = {},
     onFinishQuiz: () -> Unit = {}
 ) {
-    var selectedOptionIndex by remember { mutableIntStateOf(0) }
+    var selectedOptionIndex by remember { mutableIntStateOf(-1) }
     var currentQuestionIndex by remember { mutableIntStateOf(3) }
     val totalQuestions = 10
+    val correctOptionIndex = 0
 
     val options = listOf(
-        "A) La escasez de alimentos",
-        "B) La invasión extranjera",
-        "C) El avance tecnológico",
-        "D) La reforma religiosa"
+        "La escasez de alimentos",
+        "La invasión extranjera",
+        "El avance tecnológico",
+        "La reforma religiosa"
     )
 
     Scaffold(
@@ -162,20 +164,37 @@ fun QuizPlayScreen(
 
                         Spacer(modifier = Modifier.height(24.dp))
 
-                        // Opciones de respuesta
+                        // Opciones de respuesta con retroalimentación inmediata
                         options.forEachIndexed { index, optionText ->
                             val isSelected = selectedOptionIndex == index
 
-                            val cardBg = if (isSelected) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.secondaryContainer
-                            }
+                            val cardBg: Color
+                            val borderStroke: BorderStroke
+                            val iconColor: Color
+                            val iconText: String
 
-                            val borderStroke = if (isSelected) {
-                                BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
-                            } else {
-                                BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                            when {
+                                isSelected && index == correctOptionIndex -> {
+                                    // Seleccionada y correcta (Verde)
+                                    cardBg = MaterialTheme.extendedColors.successContainer
+                                    borderStroke = BorderStroke(1.5.dp, MaterialTheme.extendedColors.success)
+                                    iconColor = MaterialTheme.extendedColors.success
+                                    iconText = "✓"
+                                }
+                                isSelected && index != correctOptionIndex -> {
+                                    // Seleccionada e incorrecta (Rojo)
+                                    cardBg = MaterialTheme.extendedColors.errorContainer
+                                    borderStroke = BorderStroke(1.5.dp, MaterialTheme.extendedColors.error)
+                                    iconColor = MaterialTheme.extendedColors.error
+                                    iconText = "×"
+                                }
+                                else -> {
+                                    // Estado normal sin seleccionar
+                                    cardBg = MaterialTheme.colorScheme.secondaryContainer
+                                    borderStroke = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                                    iconColor = MaterialTheme.colorScheme.secondary
+                                    iconText = "○"
+                                }
                             }
 
                             Card(
@@ -196,13 +215,10 @@ fun QuizPlayScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = if (isSelected) "◉" else "○",
+                                        text = iconText,
                                         fontSize = 18.sp,
-                                        color = if (isSelected) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.secondary
-                                        },
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = iconColor,
                                         modifier = Modifier.padding(end = 12.dp)
                                     )
 
@@ -216,6 +232,28 @@ fun QuizPlayScreen(
                                     )
                                 }
                             }
+                        }
+
+                        // Retroalimentación en caso de respuesta incorrecta
+                        if (selectedOptionIndex != -1 && selectedOptionIndex != correctOptionIndex) {
+                            val maxAnswerLength = 35
+                            val rawCorrectAnswer = options.getOrNull(correctOptionIndex).orEmpty()
+                            val formattedCorrectAnswer = if (rawCorrectAnswer.length > maxAnswerLength) {
+                                rawCorrectAnswer.take(maxAnswerLength).trimEnd() + "..."
+                            } else {
+                                rawCorrectAnswer
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            Text(
+                                text = "Respuesta Correcta: $formattedCorrectAnswer",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = MaterialTheme.extendedColors.error
+                            )
                         }
                     }
                 }
@@ -234,7 +272,10 @@ fun QuizPlayScreen(
                 ) {
                     Button(
                         onClick = {
-                            if (currentQuestionIndex > 1) currentQuestionIndex--
+                            if (currentQuestionIndex > 1) {
+                                currentQuestionIndex--
+                                selectedOptionIndex = -1
+                            }
                         },
                         modifier = Modifier
                             .weight(1f)
@@ -257,6 +298,7 @@ fun QuizPlayScreen(
                         onClick = {
                             if (currentQuestionIndex < totalQuestions) {
                                 currentQuestionIndex++
+                                selectedOptionIndex = -1
                             } else {
                                 onFinishQuiz()
                             }
@@ -282,7 +324,7 @@ fun QuizPlayScreen(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
-                    text = "Guardar progreso",
+                    text = "Salir y guardar progreso",
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontSize = 14.sp
                     ),
@@ -297,7 +339,9 @@ fun QuizPlayScreen(
 @Preview(showBackground = true)
 @Composable
 fun QuizPlayScreenPreview() {
-    QuizzunioTheme {
+    QuizzunioTheme(
+        darkTheme = true
+    ) {
         QuizPlayScreen()
     }
 }

@@ -171,7 +171,9 @@ fun AppNavHost(
                     }
                 },
                 onReviewAnswersClick = {
-                    navController.popBackStack()
+                    navController.navigate(Screen.QuizPlay.route) {
+                        popUpTo(Screen.Home.route)
+                    }
                 },
                 onHomeClick = {
                     navController.navigate(Screen.Home.route) {

@@ -19,14 +19,18 @@ import androidx.compose.ui.platform.LocalContext
 data class ExtendedColors(
     val success: Color,
     val successContainer: Color,
-    val warning: Color
+    val warning: Color,
+    val error: Color = Color.Unspecified,
+    val errorContainer: Color = Color.Unspecified
 )
 
 val LocalExtendedColors = staticCompositionLocalOf {
     ExtendedColors(
         success = Color.Unspecified,
         successContainer = Color.Unspecified,
-        warning = Color.Unspecified
+        warning = Color.Unspecified,
+        error = Color.Unspecified,
+        errorContainer = Color.Unspecified
     )
 }
 
@@ -64,7 +68,9 @@ private val DarkColorScheme = darkColorScheme(
 val DarkExtendedColors = ExtendedColors(
     success = QuizzunioSuccessDark,
     successContainer = QuizzunioSuccessContainerDark,
-    warning = QuizzunioWarningDark
+    warning = QuizzunioWarningDark,
+    error = QuizzunioDarkError,
+    errorContainer = QuizzunioDarkErrorContainer
 )
 
 private val LightColorScheme = lightColorScheme(
@@ -97,7 +103,9 @@ private val LightColorScheme = lightColorScheme(
 val LightExtendedColors = ExtendedColors(
     success = QuizzunioSuccessLight,
     successContainer = QuizzunioSuccessContainerLight,
-    warning = QuizzunioWarningLight
+    warning = QuizzunioWarningLight,
+    error = QuizzunioLightError,
+    errorContainer = QuizzunioLightErrorContainer
 )
 
 @Composable
@@ -129,7 +137,7 @@ fun EmptyActivityTheme(
 }
 
 /**
- * Tema principal de Quizzunio que utiliza los esquemas de color
+ * Tema principal de Quizly que utiliza los esquemas de color
  * extraídos directamente de las maquetas de docs/maquetas/ (claro y oscuro).
  */
 @Composable
