@@ -27,17 +27,23 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cl.quizzunio.settings.AppSettings
 import cl.quizzunio.ui.theme.QuizzunioTheme
+import kotlinx.coroutines.launch
 
 /**
  * Pantalla 05: Ajustes
@@ -49,7 +55,18 @@ fun SettingsScreen(
     onThemeToggle: () -> Unit = {},
     onLogoutClick: () -> Unit = {}
 ) {
-    var isDarkTheme by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val isInspection = LocalInspectionMode.current
+
+    var previewDarkTheme by remember { mutableStateOf(false) }
+    val appSettings = remember(context) {
+        if (!isInspection) AppSettings.getInstance(context) else null
+    }
+    val isDarkStored by (appSettings?.isDarkMode?.collectAsState(initial = false)
+        ?: remember { mutableStateOf(false) })
+
+    val isDarkTheme = if (isInspection) previewDarkTheme else isDarkStored
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -97,7 +114,13 @@ fun SettingsScreen(
                     title = "Tema de la aplicación",
                     trailingValue = if (isDarkTheme) "Oscuro" else "Claro",
                     onClick = {
-                        isDarkTheme = !isDarkTheme
+                        if (isInspection) {
+                            previewDarkTheme = !previewDarkTheme
+                        } else {
+                            coroutineScope.launch {
+                                appSettings?.setDarkMode(!isDarkTheme)
+                            }
+                        }
                         onThemeToggle()
                     }
                 )
