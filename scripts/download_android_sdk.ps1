@@ -134,11 +134,11 @@ function Get-RemotePackageInfo {
 
     # Filtrar archivo según OS y Arquitectura
     $archive = @($pkg.archives.archive) | Where-Object {
-        $osNode   =$_.'host-os'
-        $archNode =$_.'host-arch'
-        $osMatch   = (-not$osNode) -or ($osNode -eq$HostOS)
-        $archMatch = (-not$archNode) -or ($archNode -eq$HostArch)
-        $osMatch -and$archMatch
+        $osNode   = $_.'host-os'
+        $archNode = $_.'host-arch'
+        $osMatch   = (-not $osNode) -or ($osNode -eq $HostOS)
+        $archMatch = (-not $archNode) -or ($archNode -eq $HostArch)
+        $osMatch -and $archMatch
     } | Select-Object -First 1
 
     if (-not $archive) {
@@ -169,7 +169,7 @@ function Install-SdkPackage {
 	$targetDir  = Join-Path $SdkBaseDir $relSubPath
 
     if (Test-Path $targetDir) {
-        Write-Host "[OMITIDO] '$($PkgInfo.Path)' ya existe en:$targetDir" -ForegroundColor DarkGray
+        Write-Host "[OMITIDO] '$($PkgInfo.Path)' ya existe en: $targetDir" -ForegroundColor DarkGray
         return [PSCustomObject]@{
             Paquete = $PkgInfo.Path
             Version = $PkgInfo.Revision
@@ -179,7 +179,7 @@ function Install-SdkPackage {
     }
 
     $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("android_sdk_" + [guid]::NewGuid().ToString("N"))
-    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null$zipFile = Join-Path $tempDir $PkgInfo.FileName
+    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null $zipFile = Join-Path $tempDir $PkgInfo.FileName
 
     try {
         Write-Host "[DESCARGANDO] $($PkgInfo.DisplayName) (v$($PkgInfo.Revision) - $($PkgInfo.SizeMB) MB)..." -ForegroundColor Cyan
@@ -187,8 +187,8 @@ function Install-SdkPackage {
 
         # Verificar SHA1
         $actualHash = (Get-FileHash -Path $zipFile -Algorithm SHA1).Hash.ToLower()
-        if ($actualHash -ne$PkgInfo.Sha1.ToLower()) {
-            throw "Fallo de checksum SHA1 para $($PkgInfo.FileName). Esperado: $($PkgInfo.Sha1), Obtenido:$actualHash"
+        if ($actualHash -ne $PkgInfo.Sha1.ToLower()) {
+            throw "Fallo de checksum SHA1 para $($PkgInfo.FileName). Esperado: $($PkgInfo.Sha1), Obtenido: $actualHash"
         }
 
         Write-Host "[EXTRAYENDO] $($PkgInfo.Path) -> $targetDir" -ForegroundColor Gray

@@ -72,8 +72,8 @@ function Get-OperatingSystem {
 Write-Host "🔍 Verificando si Java $RequiredMajorVersion o superior ya está disponible..." -ForegroundColor Cyan
 $currentMajor = Get-InstalledJavaVersion
 
-if ($null -ne$currentMajor -and $currentMajor -ge$RequiredMajorVersion) {
-    Write-Host "✅ Java $currentMajor ya se encuentra instalado (cumple con >=$RequiredMajorVersion). No se requieren cambios." -ForegroundColor Green
+if ($null -ne$currentMajor -and $currentMajor -ge $RequiredMajorVersion) {
+    Write-Host "✅ Java $currentMajor ya se encuentra instalado (cumple con >= $RequiredMajorVersion). No se requieren cambios." -ForegroundColor Green
     return
 }
 
@@ -86,7 +86,8 @@ if ($null -eq$currentMajor) {
 # ---------------------------------------------------------------------------
 # 4. Descarga del binario
 # ---------------------------------------------------------------------------
-$os = Get-OperatingSystem$arch = Get-Architecture
+$os = Get-OperatingSystem
+$arch = Get-Architecture
 $fileExt = if ($IsWin) { 'zip' } else { 'tar.gz' }
 
 $downloadUrl = "https://api.adoptium.net/v3/binary/latest/$RequiredMajorVersion/ga/$os/$arch/$JdkImageType/$JvmImpl/$HeapSize/$Vendor"
@@ -96,7 +97,7 @@ Write-Host "📥 Descargando Eclipse Temurin $RequiredMajorVersion ($os/$arch)..
 Write-Host "   URL: $downloadUrl" -ForegroundColor Gray
 
 try {
-    Invoke-WebRequest -Uri $downloadUrl -OutFile$tempFile -UseBasicParsing
+    Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFile -UseBasicParsing
     Write-Host "✅ Descarga completada." -ForegroundColor Green
 } catch {
     Write-Error "❌ Error al descargar el JDK: $_"
@@ -116,16 +117,16 @@ New-Item -ItemType Directory -Path $installDir -Force | Out-Null
 Write-Host "📂 Extrayendo archivos en: $installDir" -ForegroundColor Cyan
 try {
     if ($IsWin) {
-        Expand-Archive -Path $tempFile -DestinationPath$installDir -Force
+        Expand-Archive -Path $tempFile -DestinationPath $installDir -Force
     } else {
-        tar -xzf $tempFile -C$installDir
+        tar -xzf $tempFile -C $installDir
     }
 
     # Normalizar estructura si el archivo comprimido incluye una carpeta raíz contenedora
-    $extractedItems = Get-ChildItem -Path$installDir
-    if ($extractedItems.Count -eq 1 -and$extractedItems[0].PSIsContainer) {
-        $rootFolder =$extractedItems[0].FullName
-        Get-ChildItem -Path $rootFolder -Force \vert{} Move-Item -Destination$installDir -Force
+    $extractedItems = Get-ChildItem -Path $installDir
+    if ($extractedItems.Count -eq 1 -and $extractedItems[0].PSIsContainer) {
+        $rootFolder = $extractedItems[0].FullName
+        Get-ChildItem -Path $rootFolder -Force | Move-Item -Destination $installDir -Force
         Remove-Item -Path $rootFolder -Recurse -Force
     }
     Write-Host "✅ Extracción finalizada." -ForegroundColor Green
@@ -148,7 +149,7 @@ $javaHomePath = if (Test-Path (Join-Path $installDir "bin/$exeName")) {
 } elseif (Test-Path (Join-Path $installDir "Contents/Home/bin/$exeName")) {
     Join-Path $installDir 'Contents/Home'
 } else {
-    $found = Get-ChildItem -Path $installDir -Recurse -Filter$exeName -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $found = Get-ChildItem -Path $installDir -Recurse -Filter $exeName -File -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($found) {
         Split-Path (Split-Path $found.FullName -Parent) -Parent
     } else {
@@ -156,7 +157,7 @@ $javaHomePath = if (Test-Path (Join-Path $installDir "bin/$exeName")) {
     }
 }
 
-$javaBinPath = Join-Path$javaHomePath 'bin'
+$javaBinPath = Join-Path $javaHomePath 'bin'
 
 # ---------------------------------------------------------------------------
 # 7. Configuración de entorno específica por SO
@@ -178,18 +179,18 @@ if ($IsWin) {
 
 } else {
     # Linux / macOS: Creación de symlinks en ~/.local/bin
-    $localBin = Join-Path$HOME '.local/bin'
+    $localBin = Join-Path $HOME '.local/bin'
     if (-not (Test-Path $localBin)) {
         New-Item -ItemType Directory -Path $localBin -Force | Out-Null
     }
 
     Write-Host "🔗 Generando enlaces simbólicos en: $localBin" -ForegroundColor Cyan
-    $binFiles = Get-ChildItem -Path$javaBinPath -File
+    $binFiles = Get-ChildItem -Path $javaBinPath -File
     foreach ($file in $binFiles) {$targetLink = Join-Path $localBin$file.Name
         if (Test-Path $targetLink) {
             Remove-Item -Path $targetLink -Force
         }
-        New-Item -ItemType SymbolicLink -Path $targetLink -Target$file.FullName | Out-Null
+        New-Item -ItemType SymbolicLink -Path $targetLink -Target $file.FullName | Out-Null
     }
     Write-Host "✅ Enlaces simbólicos creados para las herramientas del JDK." -ForegroundColor Green
 
