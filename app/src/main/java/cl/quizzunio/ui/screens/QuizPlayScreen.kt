@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cl.quizzunio.core.QuizQuestion
 import cl.quizzunio.ui.theme.QuizzunioTheme
 import cl.quizzunio.ui.theme.extendedColors
 
@@ -50,17 +51,47 @@ fun QuizPlayScreen(
     onBackClick: () -> Unit = {},
     onFinishQuiz: () -> Unit = {}
 ) {
-    var selectedOptionIndex by remember { mutableIntStateOf(-1) }
-    var currentQuestionIndex by remember { mutableIntStateOf(3) }
-    val totalQuestions = 10
-    val correctOptionIndex = 0
 
-    val options = listOf(
-        "La escasez de alimentos",
-        "La invasión extranjera",
-        "El avance tecnológico",
-        "La reforma religiosa"
+    // TODO: Implementar obtencion de preguntas en Core
+    val questions = listOf<QuizQuestion>(
+        QuizQuestion(
+            "Hola, esto es una pregunta",
+            listOf(
+                "Respuesta 1",
+                "Respuesta 2",
+                "Respuesta 3",
+                "Respuesta 4"
+            ),
+            2
+        ),
+
+        QuizQuestion(
+            "Esta es otra pregunta",
+            listOf(
+                "Respuesta 1",
+                "Respuesta 2",
+                "Respuesta 3",
+                "Respuesta 4"
+            ),
+            0
+        ),
+        QuizQuestion(
+            "Esta es la última pregunta",
+            listOf(
+                "Respuesta 1",
+                "Respuesta 2",
+                "Respuesta 3",
+                "Respuesta 4"
+            ),
+            1
+        )
     )
+
+    var selectedOptionIndex by remember { mutableIntStateOf(-1) }
+    var currentQuestionIndex by remember { mutableIntStateOf(1) }
+    val totalQuestions = questions.size
+    val question = questions.getOrElse(currentQuestionIndex - 1) { questions.first() }
+    val correctOptionIndex = question.correctAnswer
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -115,7 +146,7 @@ fun QuizPlayScreen(
                         color = MaterialTheme.colorScheme.onBackground
                     )
 
-                    val progressPercent = (currentQuestionIndex * 100) / totalQuestions
+                    val progressPercent = if (totalQuestions > 0) (currentQuestionIndex * 100) / totalQuestions else 0
                     Text(
                         text = "$progressPercent%",
                         style = MaterialTheme.typography.bodyMedium.copy(
@@ -129,7 +160,7 @@ fun QuizPlayScreen(
 
                 // Barra de progreso
                 LinearProgressIndicator(
-                    progress = { currentQuestionIndex.toFloat() / totalQuestions },
+                    progress = { if (totalQuestions > 0) currentQuestionIndex.toFloat() / totalQuestions else 0f },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(8.dp),
@@ -153,7 +184,7 @@ fun QuizPlayScreen(
                             .padding(20.dp)
                     ) {
                         Text(
-                            text = "¿Cuál fue la causa principal de la Revolución Francesa?",
+                            text = question.question,
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
@@ -165,7 +196,7 @@ fun QuizPlayScreen(
                         Spacer(modifier = Modifier.height(24.dp))
 
                         // Opciones de respuesta con retroalimentación inmediata
-                        options.forEachIndexed { index, optionText ->
+                        question.answers.forEachIndexed { index, optionText ->
                             val isSelected = selectedOptionIndex == index
 
                             val cardBg: Color
@@ -237,7 +268,7 @@ fun QuizPlayScreen(
                         // Retroalimentación en caso de respuesta incorrecta
                         if (selectedOptionIndex != -1 && selectedOptionIndex != correctOptionIndex) {
                             val maxAnswerLength = 35
-                            val rawCorrectAnswer = options.getOrNull(correctOptionIndex).orEmpty()
+                            val rawCorrectAnswer = question.answers.getOrNull(question.correctAnswer).orEmpty()
                             val formattedCorrectAnswer = if (rawCorrectAnswer.length > maxAnswerLength) {
                                 rawCorrectAnswer.take(maxAnswerLength).trimEnd() + "..."
                             } else {
