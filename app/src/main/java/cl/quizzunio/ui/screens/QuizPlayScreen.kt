@@ -232,7 +232,11 @@ fun QuizPlayScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 6.dp)
-                                    .clickable { selectedOptionIndex = index },
+                                    .clickable(enabled = selectedOptionIndex == -1) {
+                                        if (selectedOptionIndex == -1) {
+                                            selectedOptionIndex = index
+                                        }
+                                    },
                                 shape = RoundedCornerShape(12.dp),
                                 border = borderStroke,
                                 colors = CardDefaults.cardColors(
