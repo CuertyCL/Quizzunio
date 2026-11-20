@@ -26,6 +26,19 @@ import cl.quizzunio.ui.screens.QuizResultScreen
 import cl.quizzunio.ui.screens.RegisterScreen
 import cl.quizzunio.ui.screens.SettingsScreen
 import cl.quizzunio.ui.screens.WelcomeScreen
+import cl.quizzunio.auth.LocalAuthViewModel
+import cl.quizzunio.auth.SessionState
+import cl.quizzunio.study.AccountStudyCoordinator
+import cl.quizzunio.study.AccountQuizStore
+import cl.quizzunio.study.RemoteQuizRepository
+import cl.quizzunio.ui.screens.QuizEditorScreen
+import cl.quizzunio.ui.screens.LocalQuizEditorNavigation
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.CircularProgressIndicator
+import cl.quizzunio.study.StudyNavigationTarget
 
 /**
  * Rutas y destinos de la aplicación basados en docs/maquetas/Flujo-de-App.png
@@ -54,7 +67,50 @@ fun AppNavHost(
     val studyModel = rememberStudyQuizViewModel()
     val studyState by studyModel.state.collectAsState()
     val context = LocalContext.current
-    CompositionLocalProvider(LocalStudyQuizViewModel provides studyModel) {
+    val authModel = LocalAuthViewModel.current
+    val auth = authModel?.state?.collectAsState()?.value
+    val user = (auth?.session as? SessionState.Authenticated)?.user
+    val accountOwner by studyModel.accountOwner.collectAsState()
+    val navigationTarget by studyModel.navigationTarget.collectAsState()
+    var previousUserId by remember { mutableStateOf<Long?>(null) }
+    var showAnonymousWarning by remember { mutableStateOf(false) }
+    LaunchedEffect(user?.userId, auth?.server, auth?.session is SessionState.Anonymous) {
+        val coordinator = if (user != null) AccountStudyCoordinator(user.userId,
+            RemoteQuizRepository(authModel.client, authModel.session), AccountQuizStore(context, authModel.session.server, user.userId)) else null
+        if (studyModel.accountOwner.value != user?.userId) studyModel.bindAccount(coordinator)
+        if (previousUserId != null && user == null) navController.navigate(Screen.Home.route) {
+            popUpTo(navController.graph.id) { inclusive = true }
+        }
+        previousUserId = user?.userId
+    }
+    if (accountOwner != user?.userId) { CircularProgressIndicator(); return }
+    if (auth?.session is SessionState.Restoring || auth?.session is SessionState.Unavailable) {
+        Column {
+            if (auth.session is SessionState.Restoring) { CircularProgressIndicator(); Text("Restaurando sesión...") }
+            else {
+                Text((auth.session as SessionState.Unavailable).message)
+                TextButton(onClick = { authModel?.restore() }, enabled = !auth.busy) { Text("Reintentar restauración") }
+                TextButton(onClick = { authModel?.abandon() }, enabled = !auth.busy) { Text("Abandonar sesión local y continuar como anónimo") }
+            }
+            auth.message?.let { Text(it) }
+        }
+        return
+    }
+    LaunchedEffect(navigationTarget) {
+        when (navigationTarget) {
+            StudyNavigationTarget.Play -> if (navController.currentDestination?.route == Screen.CreateQuiz.route) {
+                navController.navigate(Screen.QuizPlay.route) { popUpTo(Screen.CreateQuiz.route) { inclusive = true } }
+            }
+            StudyNavigationTarget.Results -> if (navController.currentDestination?.route == Screen.QuizPlay.route) {
+                navController.navigate(Screen.QuizResult.route) { popUpTo(Screen.Home.route) }
+            }
+            StudyNavigationTarget.EditorClosed -> if (navController.currentDestination?.route == "edit_quiz/{localId}") navController.popBackStack()
+            null -> Unit
+        }
+        studyModel.consumeNavigation()
+    }
+    CompositionLocalProvider(LocalStudyQuizViewModel provides studyModel,
+        LocalQuizEditorNavigation provides { id -> navController.navigate("edit_quiz/$id") }) {
     NavHost(
         navController = navController,
         startDestination = startDestination,
@@ -76,8 +132,9 @@ fun AppNavHost(
         composable(Screen.Login.route) {
             LoginScreen(
                 onLoginSuccess = {
+                    if (authModel?.state?.value?.session !is SessionState.Authenticated) return@LoginScreen
                     navController.navigate(Screen.Home.route) {
-                        popUpTo(Screen.Welcome.route) { inclusive = true }
+                        popUpTo(navController.graph.id) { inclusive = true }
                     }
                 },
                 onNavigateToRegister = {
@@ -85,6 +142,7 @@ fun AppNavHost(
                 },
                 onForgotPasswordClick = {
                     // Acción para recuperación de contraseña
+                    authModel?.showMessage("El servidor todavía no dispone de recuperación de contraseña. No se ha enviado ningún correo.")
                 }
             )
         }
@@ -93,8 +151,9 @@ fun AppNavHost(
         composable(Screen.Register.route) {
             RegisterScreen(
                 onRegisterSuccess = {
+                    if (authModel?.state?.value?.session !is SessionState.Authenticated) return@RegisterScreen
                     navController.navigate(Screen.Home.route) {
-                        popUpTo(Screen.Welcome.route) { inclusive = true }
+                        popUpTo(navController.graph.id) { inclusive = true }
                     }
                 },
                 onNavigateToLogin = {
@@ -107,12 +166,14 @@ fun AppNavHost(
         composable(Screen.Home.route) {
             QuizHomeScreen(
                 onCreateQuizClick = {
+                    authModel?.interaction()
                     navController.navigate(Screen.CreateQuiz.route)
                 },
                 onSettingsClick = {
                     navController.navigate(Screen.Settings.route)
                 },
                 onQuizClick = { id ->
+                    authModel?.interaction()
                     if (studyModel.selectQuiz(id)) navController.navigate(Screen.QuizPlay.route)
                 }
             )
@@ -128,9 +189,9 @@ fun AppNavHost(
                     // Alternar tema
                 },
                 onLogoutClick = {
-                    navController.navigate(Screen.Welcome.route) {
-                        popUpTo(Screen.Home.route) { inclusive = true }
-                    }
+                    if (user != null) authModel?.logout()
+                    else if (studyState.quizzes.isNotEmpty() || studyState.documents.isNotEmpty()) showAnonymousWarning = true
+                    else navController.navigate(Screen.Welcome.route)
                 }
             )
         }
@@ -142,14 +203,12 @@ fun AppNavHost(
                     navController.popBackStack()
                 },
                 onSaveDraftClick = {
-                    if (navController.currentDestination?.route == Screen.CreateQuiz.route) {
-                        navController.navigate(Screen.QuizPlay.route) {
-                            popUpTo(Screen.CreateQuiz.route) { inclusive = true }
-                        }
-                    }
+                    studyModel.requestGeneratedQuiz()
                 },
                 onGenerateAiClick = {
-                    Toast.makeText(context, "La generación con IA estará disponible en una próxima versión.", Toast.LENGTH_LONG).show()
+                    studyModel.startRemoteGeneration {
+                        navController.navigate(Screen.AiProcessing.route)
+                    }
                 }
             )
         }
@@ -165,6 +224,10 @@ fun AppNavHost(
             )
         }
 
+        composable("edit_quiz/{localId}") { entry ->
+            QuizEditorScreen(entry.arguments?.getString("localId").orEmpty(), onBack = { navController.popBackStack() })
+        }
+
         // Pantalla 08: Responder Cuestionario
         composable(Screen.QuizPlay.route) {
             QuizPlayScreen(
@@ -172,9 +235,7 @@ fun AppNavHost(
                     navController.popBackStack()
                 },
                 onFinishQuiz = {
-                    navController.navigate(Screen.QuizResult.route) {
-                        popUpTo(Screen.Home.route)
-                    }
+                    studyModel.requestResults()
                 }
             )
         }
@@ -212,6 +273,15 @@ fun AppNavHost(
             )
         }
     }
+    if (showAnonymousWarning) AlertDialog(
+        onDismissRequest = { showAnonymousWarning = false },
+        title = { Text("Cuestionarios temporales") },
+        text = { Text("Puedes volver y seguir trabajando como anónimo. Si inicias sesión, el contenido temporal se descartará y no se trasladará automáticamente a la cuenta.") },
+        confirmButton = { TextButton(onClick = { showAnonymousWarning = false; navController.navigate(Screen.Welcome.route) }) { Text("Continuar al acceso") } },
+        dismissButton = { TextButton(onClick = { showAnonymousWarning = false }) { Text("Seguir como anónimo") } }
+    )
+    auth?.message?.let { message -> AlertDialog(onDismissRequest = { authModel?.clearMessage() }, title = { Text("Cuenta") },
+        text = { Text(message) }, confirmButton = { TextButton(onClick = { authModel?.clearMessage() }) { Text("Entendido") } }) }
     studyState.message?.let { message ->
         AlertDialog(
             onDismissRequest = { studyModel.clearMessage() },

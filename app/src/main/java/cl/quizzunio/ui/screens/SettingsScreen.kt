@@ -44,6 +44,8 @@ import androidx.compose.ui.unit.sp
 import cl.quizzunio.settings.AppSettings
 import cl.quizzunio.ui.theme.QuizzunioTheme
 import kotlinx.coroutines.launch
+import cl.quizzunio.auth.LocalAuthViewModel
+import cl.quizzunio.auth.SessionState
 
 /**
  * Pantalla 05: Ajustes
@@ -58,6 +60,9 @@ fun SettingsScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val isInspection = LocalInspectionMode.current
+    val authModel = LocalAuthViewModel.current
+    val auth = authModel?.state?.collectAsState()?.value
+    var information by remember { mutableStateOf<String?>(null) }
 
     var previewDarkTheme by remember { mutableStateOf(false) }
     val appSettings = remember(context) {
@@ -108,6 +113,7 @@ fun SettingsScreen(
             Column(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
+                AccountSettingsPanel()
                 // Opción: Tema de la aplicación
                 SettingsItemCard(
                     icon = "☼",
@@ -118,7 +124,9 @@ fun SettingsScreen(
                             previewDarkTheme = !previewDarkTheme
                         } else {
                             coroutineScope.launch {
-                                appSettings?.setDarkMode(!isDarkTheme)
+                                try { appSettings?.setDarkMode(!isDarkTheme) }
+                                catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                                catch (error: java.io.IOException) { information = "No se pudo guardar el tema. Inténtalo de nuevo." }
                             }
                         }
                         onThemeToggle()
@@ -130,7 +138,7 @@ fun SettingsScreen(
                     icon = "◎",
                     title = "Idioma",
                     trailingValue = "Español",
-                    onClick = {}
+                    onClick = { information = "La interfaz de esta versión está disponible en español." }
                 )
 
                 // Opción: Ayuda y soporte
@@ -138,7 +146,7 @@ fun SettingsScreen(
                     icon = "?",
                     title = "Ayuda y soporte",
                     trailingValue = "›",
-                    onClick = {}
+                    onClick = { information = "Adjunta TXT, PDF con texto, DOCX o PPTX para generar ejercicios locales. Los PDF escaneados necesitan OCR externo. El tema es un metadato y no filtra el material. Sin cuenta, tus cuestionarios solo viven en memoria. Free permite guardarlos en la nube; Premium añade generación IA en servidor. Puedes gestionar cuenta y conexión en esta pantalla." }
                 )
 
                 // Opción: Acerca de Quizzunio
@@ -146,7 +154,7 @@ fun SettingsScreen(
                     icon = "ⓘ",
                     title = "Acerca de Quizzunio",
                     trailingValue = "›",
-                    onClick = {}
+                    onClick = { information = "Quizzunio convierte tus materiales en cuestionarios de estudio. El generador local es extractivo y funciona sin IA. La generación remota Premium envía texto al servidor, nunca los archivos originales." }
                 )
             }
 
@@ -155,6 +163,7 @@ fun SettingsScreen(
             // Botón Cerrar Sesión (Peligro)
             OutlinedButton(
                 onClick = onLogoutClick,
+                enabled = auth?.busy != true,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),
@@ -166,7 +175,7 @@ fun SettingsScreen(
                 )
             ) {
                 Text(
-                    text = "Cerrar sesión",
+                    text = if (auth?.session is SessionState.Authenticated) "Cerrar todas las sesiones" else "Iniciar sesión o registrarse",
                     style = MaterialTheme.typography.bodyLarge.copy(
                         fontWeight = FontWeight.Bold
                     )
@@ -174,6 +183,8 @@ fun SettingsScreen(
             }
         }
     }
+    information?.let { message -> androidx.compose.material3.AlertDialog(onDismissRequest = { information = null }, title = { Text("Quizzunio") },
+        text = { Text(message) }, confirmButton = { androidx.compose.material3.TextButton(onClick = { information = null }) { Text("Entendido") } }) }
 }
 
 @Composable

@@ -48,8 +48,15 @@ fun QuizResultScreen(
     onReviewAnswersClick: () -> Unit = {},
     onHomeClick: () -> Unit = {}
 ) {
-    val percentage = (correctAnswers * 100) / totalQuestions
-    val incorrectAnswers = totalQuestions - correctAnswers
+    val safeTotal = totalQuestions.coerceAtLeast(1)
+    val safeCorrect = correctAnswers.coerceIn(0, safeTotal)
+    val percentage = (safeCorrect * 100) / safeTotal
+    val incorrectAnswers = safeTotal - safeCorrect
+    val heading = when {
+        percentage >= 80 -> "¡Excelente!"
+        percentage >= 50 -> "¡Buen trabajo!"
+        else -> "Sigue practicando"
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -94,7 +101,7 @@ fun QuizResultScreen(
 
                 // Mensaje de felicitación
                 Text(
-                    text = "¡Excelente!",
+                    text = heading,
                     style = MaterialTheme.typography.headlineMedium.copy(
                         fontSize = 26.sp,
                         fontWeight = FontWeight.Bold
@@ -129,7 +136,7 @@ fun QuizResultScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "$correctAnswers / $totalQuestions",
+                            text = "$safeCorrect / $safeTotal",
                             style = MaterialTheme.typography.headlineLarge.copy(
                                 fontSize = 32.sp,
                                 fontWeight = FontWeight.Bold
@@ -168,7 +175,7 @@ fun QuizResultScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "✓  $correctAnswers correctas",
+                                text = "✓  $safeCorrect correctas",
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold

@@ -36,6 +36,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cl.quizzunio.ui.theme.QuizzunioTheme
 import cl.quizzunio.ui.theme.extendedColors
+import cl.quizzunio.study.LocalStudyQuizViewModel
+import cl.quizzunio.study.GenerationStage
+import androidx.compose.runtime.collectAsState
+import androidx.compose.material3.CircularProgressIndicator
 
 /**
  * Pantalla 07: Procesamiento IA
@@ -45,6 +49,8 @@ import cl.quizzunio.ui.theme.extendedColors
 fun AiProcessingScreen(
     onProcessingComplete: () -> Unit = {}
 ) {
+    val model = LocalStudyQuizViewModel.current
+    val stage = model?.generationStage?.collectAsState()?.value ?: GenerationStage.Idle
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -79,7 +85,12 @@ fun AiProcessingScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Estamos creando tu\ncuestionario",
+                    text = when (stage) {
+                        GenerationStage.Validated -> "Cuestionario recibido y validado"
+                        GenerationStage.Failed -> "No se confirmó la generación"
+                        GenerationStage.Idle -> "No hay una generación en curso"
+                        else -> "Solicitud de generación en curso"
+                    },
                     style = MaterialTheme.typography.headlineSmall.copy(
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
@@ -92,7 +103,7 @@ fun AiProcessingScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Esto puede tardar unos segundos...",
+                    text = "El servidor responde al terminar. Si pierdes la conexión, puede completar y guardar el trabajo; consulta la nube antes de repetirlo.",
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontSize = 13.sp
                     ),
@@ -111,6 +122,7 @@ fun AiProcessingScreen(
                         .border(BorderStroke(3.dp, MaterialTheme.colorScheme.tertiary), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
+                    if (stage == GenerationStage.Requesting || stage == GenerationStage.Preparing) CircularProgressIndicator()
                     Text(
                         text = "✦",
                         fontSize = 58.sp,
@@ -126,20 +138,20 @@ fun AiProcessingScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     ProcessingStepItem(
-                        text = "Analizando archivos",
-                        status = StepStatus.COMPLETED
+                        text = "Preparar material extraído",
+                        status = if (stage in listOf(GenerationStage.Requesting, GenerationStage.Received, GenerationStage.Validated)) StepStatus.COMPLETED else StepStatus.PENDING
                     )
                     ProcessingStepItem(
-                        text = "Detectando temas",
-                        status = StepStatus.COMPLETED
+                        text = "Esperar respuesta del servidor",
+                        status = if (stage == GenerationStage.Requesting) StepStatus.IN_PROGRESS else if (stage in listOf(GenerationStage.Received, GenerationStage.Validated)) StepStatus.COMPLETED else StepStatus.PENDING
                     )
                     ProcessingStepItem(
-                        text = "Generando preguntas",
-                        status = StepStatus.IN_PROGRESS
+                        text = "Recibir cuestionario",
+                        status = if (stage in listOf(GenerationStage.Received, GenerationStage.Validated)) StepStatus.COMPLETED else StepStatus.PENDING
                     )
                     ProcessingStepItem(
-                        text = "Validando respuestas",
-                        status = StepStatus.PENDING
+                        text = "Validar y adaptar cuestionario",
+                        status = if (stage == GenerationStage.Validated) StepStatus.COMPLETED else StepStatus.PENDING
                     )
                 }
             }
@@ -178,6 +190,7 @@ fun AiProcessingScreen(
                 // Botón interactivo para avanzar cuando finalice la generación
                 Button(
                     onClick = onProcessingComplete,
+                    enabled = stage == GenerationStage.Validated,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp),

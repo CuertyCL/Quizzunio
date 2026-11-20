@@ -45,6 +45,8 @@ import androidx.compose.ui.unit.sp
 import cl.quizzunio.core.QuizQuestion
 import cl.quizzunio.ui.theme.QuizzunioTheme
 import cl.quizzunio.ui.theme.extendedColors
+import cl.quizzunio.auth.LocalAuthViewModel
+import cl.quizzunio.auth.SessionState
 
 /**
  * Pantalla 08: Responder Cuestionario
@@ -58,6 +60,9 @@ fun QuizPlayScreen(
     val studyModel = LocalStudyQuizViewModel.current
     val studyState = studyModel?.state?.collectAsState()?.value
     val isBusy = studyState?.isBusy == true
+    val authModel = LocalAuthViewModel.current
+    val auth = authModel?.state?.collectAsState()?.value
+    val isReview = studyModel?.isReview?.collectAsState()?.value == true
     BackHandler(enabled = isBusy) { }
     if (studyModel != null && studyState?.activeQuiz == null) {
         LaunchedEffect(isBusy) { if (!isBusy) onBackClick() }
@@ -154,7 +159,7 @@ fun QuizPlayScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Pregunta $currentQuestionIndex de $totalQuestions",
+                        text = "${if (isReview) "Revisión" else "Pregunta"} $currentQuestionIndex de $totalQuestions",
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
@@ -248,9 +253,9 @@ fun QuizPlayScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 6.dp)
-                                    .clickable(enabled = selectedOptionIndex == -1 && !isBusy) {
+                                    .clickable(enabled = selectedOptionIndex == -1 && !isBusy && !isReview) {
                                         if (selectedOptionIndex == -1) {
-                                            if (studyModel != null) studyModel.selectAnswer(index)
+                                            if (studyModel != null) { studyModel.selectAnswer(index); authModel?.interaction() }
                                             else previewSelectedOptionIndex = index
                                         }
                                     },
@@ -381,12 +386,14 @@ fun QuizPlayScreen(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
-                    text = "Salir y guardar progreso",
+                    text = if (auth?.session is SessionState.Authenticated) "Guardar progreso y salir" else "Salir y mantener en memoria",
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontSize = 14.sp
                     ),
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable { /* Guardar */ }
+                    modifier = Modifier.clickable(enabled = !isBusy) {
+                        if (studyModel != null) studyModel.pauseQuiz(onBackClick) else onBackClick()
+                    }
                 )
             }
         }

@@ -35,6 +35,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cl.quizzunio.ui.theme.QuizzunioTheme
+import cl.quizzunio.auth.LocalAuthViewModel
+import cl.quizzunio.auth.SessionState
+import cl.quizzunio.auth.CredentialValidator
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 
 /**
  * Pantalla 02: Iniciar Sesión
@@ -48,6 +53,11 @@ fun LoginScreen(
 ) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    val authModel = LocalAuthViewModel.current
+    val auth = authModel?.state?.collectAsState()?.value
+    LaunchedEffect(auth?.session) {
+        if (auth?.session is SessionState.Authenticated) { password = ""; onLoginSuccess() }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
@@ -102,9 +112,10 @@ fun LoginScreen(
             // Campo de Nombre de Usuario
             OutlinedTextField(
                 value = username,
-                onValueChange = { username = it },
+                onValueChange = { if (CredentialValidator.ascii(it)) username = it else authModel?.showMessage("Este campo solo admite ASCII.") },
+                enabled = auth?.busy != true,
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Nombre de usuario") },
+                placeholder = { Text("Usuario o correo electrónico") },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Person,
@@ -127,7 +138,8 @@ fun LoginScreen(
             // Campo de Contraseña
             OutlinedTextField(
                 value = password,
-                onValueChange = { password = it },
+                onValueChange = { if (CredentialValidator.ascii(it)) password = it else authModel?.showMessage("La entrada de contraseña de Android solo admite ASCII.") },
+                enabled = auth?.busy != true,
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("Contraseña") },
                 leadingIcon = {
@@ -167,7 +179,8 @@ fun LoginScreen(
 
             // Botón Iniciar Sesión
             Button(
-                onClick = onLoginSuccess,
+                onClick = { authModel?.login(username, password) },
+                enabled = authModel != null && auth?.busy != true,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),
@@ -178,7 +191,7 @@ fun LoginScreen(
                 )
             ) {
                 Text(
-                    text = "Iniciar sesión",
+                    text = if (auth?.busy == true) "Autenticando..." else "Iniciar sesión",
                     style = MaterialTheme.typography.bodyLarge.copy(
                         fontWeight = FontWeight.Bold
                     )

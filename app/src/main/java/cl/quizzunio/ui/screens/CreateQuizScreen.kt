@@ -61,6 +61,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cl.quizzunio.ui.theme.QuizzunioTheme
+import cl.quizzunio.auth.LocalAuthViewModel
+import cl.quizzunio.auth.AccessPolicy
+import cl.quizzunio.auth.GenerationSource
+import cl.quizzunio.auth.SessionState
+import androidx.compose.material3.FilterChip
 
 data class AttachedFile(
     val name: String,
@@ -82,6 +87,10 @@ fun CreateQuizScreen(
     val studyState = studyModel?.state?.collectAsState()?.value
     val context = LocalContext.current
     val isBusy = studyState?.isBusy == true
+    val authModel = LocalAuthViewModel.current
+    val auth = authModel?.state?.collectAsState()?.value
+    val session = auth?.session ?: SessionState.Anonymous
+    var source by remember((session as? SessionState.Authenticated)?.user) { mutableStateOf(AccessPolicy.defaultSource(session)) }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         studyModel?.importDocuments(uris)
     }
@@ -137,6 +146,14 @@ fun CreateQuizScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
+            Text(if (session is SessionState.Authenticated) "${session.user.tier.name} · ${if (source == GenerationSource.Local) "Generación local: 1–50 preguntas" else "Generación en servidor: 1–15 preguntas, texto ASCII"}"
+                else "Generación local · Sin cuenta, el cuestionario solo permanece en memoria.")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = source == GenerationSource.Local, onClick = { source = GenerationSource.Local }, enabled = !isBusy, label = { Text("Local") })
+                FilterChip(selected = source == GenerationSource.Server, onClick = { source = GenerationSource.Server }, enabled = !isBusy && AccessPolicy.canGenerateRemotely(session), label = { Text("Servidor · Premium") })
+            }
+            Text("Tema o unidad se conserva como metadato; no filtra el material. Guardar en nube es una acción posterior y admite hasta 15 preguntas.")
+            Spacer(modifier = Modifier.height(12.dp))
             // Nombre del cuestionario
             Text(
                 text = "Nombre del cuestionario",
@@ -184,7 +201,7 @@ fun CreateQuizScreen(
                 onValueChange = { if (studyModel != null) studyModel.updateTopic(it) else selectedTopic = it },
                 enabled = !isBusy,
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Seleccionar tema o unidad  ▾") },
+                placeholder = { Text("Tema o unidad (metadato opcional)") },
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -415,7 +432,9 @@ fun CreateQuizScreen(
             ) {
                 Button(
                     onClick = {
-                        if (studyModel != null) studyModel.generateQuiz(onSaveDraftClick)
+                        authModel?.interaction()
+                        if (source == GenerationSource.Server) onGenerateAiClick()
+                        else if (studyModel != null) studyModel.generateQuiz(onSaveDraftClick)
                         else onSaveDraftClick()
                     },
                     enabled = !isBusy,
@@ -430,7 +449,7 @@ fun CreateQuizScreen(
                     )
                 ) {
                     Text(
-                        text = if (isBusy) "Procesando..." else "Generar cuestionario",
+                        text = if (isBusy) "Procesando..." else if (source == GenerationSource.Server) "Generar en servidor" else "Generar localmente",
                         textAlign = TextAlign.Center,
                         maxLines = 2,
                         style = MaterialTheme.typography.bodyMedium.copy(
@@ -440,8 +459,8 @@ fun CreateQuizScreen(
                 }
 
                 Button(
-                    onClick = onGenerateAiClick,
-                    enabled = !isBusy,
+                    onClick = { source = if (source == GenerationSource.Server) GenerationSource.Local else GenerationSource.Server },
+                    enabled = !isBusy && AccessPolicy.canGenerateRemotely(session),
                     modifier = Modifier
                         .weight(1.2f)
                         .height(48.dp),
@@ -452,7 +471,7 @@ fun CreateQuizScreen(
                     )
                 ) {
                     Text(
-                        text = "Generar con IA ✦",
+                        text = if (source == GenerationSource.Server) "Usar generador local" else "Usar IA Premium ✦",
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontWeight = FontWeight.Bold
                         )

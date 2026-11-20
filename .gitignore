@@ -16,3 +16,10 @@
 local.properties
 
 .agents/
+specs/
+
+IMPLEMENTATION_PLAN.md
+AUDIT.md
+CURRENT_STATUS.md
+codex.txt
+agy.txt

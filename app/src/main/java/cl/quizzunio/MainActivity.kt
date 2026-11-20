@@ -17,6 +17,9 @@ import cl.quizzunio.settings.AppSettings
 import cl.quizzunio.ui.navigation.AppNavHost
 import cl.quizzunio.ui.theme.EmptyActivityTheme
 import cl.quizzunio.ui.theme.QuizzunioTheme
+import cl.quizzunio.auth.LocalAuthViewModel
+import cl.quizzunio.auth.rememberAuthViewModel
+import androidx.compose.runtime.CompositionLocalProvider
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -24,9 +27,12 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val appSettings = AppSettings.getInstance(applicationContext)
         setContent {
+            val authModel = rememberAuthViewModel(this)
             val isDarkMode by appSettings.isDarkMode.collectAsState(initial = false)
             QuizzunioTheme(darkTheme = isDarkMode) {
-                AppNavHost(modifier = Modifier.fillMaxSize())
+                CompositionLocalProvider(LocalAuthViewModel provides authModel) {
+                AppNavHost(modifier = Modifier.fillMaxSize(), startDestination = "home")
+                }
             }
         }
     }

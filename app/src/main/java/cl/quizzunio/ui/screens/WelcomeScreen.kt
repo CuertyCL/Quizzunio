@@ -91,7 +91,7 @@ fun WelcomeScreen(
 
                 // Formatos compatibles
                 Text(
-                    text = "PDF  •  PPTX  •  DOCX",
+                    text = "PDF  •  TXT  •  PPTX  •  DOCX",
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Normal

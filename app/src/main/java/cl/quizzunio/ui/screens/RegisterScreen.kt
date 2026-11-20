@@ -36,6 +36,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cl.quizzunio.ui.theme.QuizzunioTheme
+import cl.quizzunio.auth.LocalAuthViewModel
+import cl.quizzunio.auth.SessionState
+import cl.quizzunio.auth.CredentialValidator
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 
 /**
  * Pantalla 03: Registrarse
@@ -50,6 +55,11 @@ fun RegisterScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
+    val authModel = LocalAuthViewModel.current
+    val auth = authModel?.state?.collectAsState()?.value
+    LaunchedEffect(auth?.session) {
+        if (auth?.session is SessionState.Authenticated) { password = ""; confirmPassword = ""; onRegisterSuccess() }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
@@ -104,7 +114,8 @@ fun RegisterScreen(
             // Nombre de usuario
             OutlinedTextField(
                 value = username,
-                onValueChange = { username = it },
+                onValueChange = { if (CredentialValidator.ascii(it)) username = it else authModel?.showMessage("Este campo solo admite ASCII.") },
+                enabled = auth?.busy != true,
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("Nombre de usuario") },
                 leadingIcon = {
@@ -129,7 +140,8 @@ fun RegisterScreen(
             // Correo electrónico
             OutlinedTextField(
                 value = email,
-                onValueChange = { email = it },
+                onValueChange = { if (CredentialValidator.ascii(it)) email = it else authModel?.showMessage("El correo solo admite ASCII.") },
+                enabled = auth?.busy != true,
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("Correo electrónico") },
                 leadingIcon = {
@@ -154,7 +166,8 @@ fun RegisterScreen(
             // Contraseña
             OutlinedTextField(
                 value = password,
-                onValueChange = { password = it },
+                onValueChange = { if (CredentialValidator.ascii(it)) password = it else authModel?.showMessage("La contraseña en Android solo admite ASCII.") },
+                enabled = auth?.busy != true,
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("Contraseña") },
                 leadingIcon = {
@@ -180,7 +193,8 @@ fun RegisterScreen(
             // Confirmar contraseña
             OutlinedTextField(
                 value = confirmPassword,
-                onValueChange = { confirmPassword = it },
+                onValueChange = { if (CredentialValidator.ascii(it)) confirmPassword = it else authModel?.showMessage("La contraseña en Android solo admite ASCII.") },
+                enabled = auth?.busy != true,
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("Confirmar contraseña") },
                 leadingIcon = {
@@ -205,7 +219,7 @@ fun RegisterScreen(
 
             // Texto de ayuda
             Text(
-                text = "La contraseña debe ser segura",
+                text = "Usa 12–128 caracteres ASCII. Los espacios se conservan.",
                 style = MaterialTheme.typography.bodySmall.copy(
                     fontSize = 12.sp
                 ),
@@ -217,7 +231,8 @@ fun RegisterScreen(
 
             // Botón Registrarse
             Button(
-                onClick = onRegisterSuccess,
+                onClick = { authModel?.register(username, email, password, confirmPassword) },
+                enabled = authModel != null && auth?.busy != true,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),
@@ -228,7 +243,7 @@ fun RegisterScreen(
                 )
             ) {
                 Text(
-                    text = "Registrarse",
+                    text = if (auth?.busy == true) "Registrando..." else "Registrarse",
                     style = MaterialTheme.typography.bodyLarge.copy(
                         fontWeight = FontWeight.Bold
                     )

@@ -24,8 +24,21 @@ data class StudyQuizLoadResult(
 /** Guarda los cuestionarios en el almacenamiento privado de la aplicación. */
 class StudyQuizRepository(context: Context) {
     private val directory = File(context.applicationContext.filesDir, "study_quizzes")
+    private var accountDirectory: File? = null
+
+    val canPersist: Boolean get() = accountDirectory != null
+
+    /** El almacén histórico no se atribuye automáticamente a ninguna cuenta. */
+    fun useAccount(server: String?, userId: Long?) {
+        accountDirectory = if (server != null && userId != null && userId > 0) {
+            val namespace = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(server.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+            File(directory, "$namespace/$userId")
+        } else null
+    }
 
     fun load(): StudyQuizLoadResult {
+        val directory = accountDirectory ?: return StudyQuizLoadResult(emptyList(), 0)
         if (!directory.exists()) return StudyQuizLoadResult(emptyList(), 0)
         val files = directory.listFiles() ?: throw IOException("No se pudieron leer los cuestionarios guardados.")
         val ids = files.sortedByDescending { it.lastModified() }.mapNotNull { file ->
@@ -60,6 +73,7 @@ class StudyQuizRepository(context: Context) {
     }
 
     fun save(quiz: StudyQuiz) {
+        val directory = accountDirectory ?: throw IllegalStateException("El modo anónimo solo conserva cuestionarios en memoria.")
         require(ID_PATTERN.matches(quiz.id)) { "El identificador del cuestionario no es válido." }
         validate(quiz)
         if (!directory.exists() && !directory.mkdirs()) {

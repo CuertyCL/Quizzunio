@@ -23,6 +23,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.flow.collect
 
 data class StudyQuizState(
     val quizName: String = "",
@@ -45,6 +47,9 @@ data class StudyQuizState(
         }
 }
 
+enum class GenerationStage { Idle, Preparing, Requesting, Received, Validated, Failed }
+enum class StudyNavigationTarget { Play, Results, EditorClosed }
+
 /** Coordina importación, generación local y una sesión de respuestas independiente de la UI. */
 class StudyQuizViewModel(
     private val repository: StudyQuizRepository,
@@ -54,6 +59,52 @@ class StudyQuizViewModel(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mutableState = MutableStateFlow(StudyQuizState())
     val state: StateFlow<StudyQuizState> = mutableState.asStateFlow()
+    private val attempts = mutableMapOf<String, Pair<List<Int?>, Int>>()
+    private var account: AccountStudyCoordinator? = null
+    private val mutableAccountOwner = MutableStateFlow<Long?>(null)
+    val accountOwner: StateFlow<Long?> = mutableAccountOwner.asStateFlow()
+    private val mutableReview = MutableStateFlow(false)
+    val isReview: StateFlow<Boolean> = mutableReview.asStateFlow()
+    private val mutableAccountState = MutableStateFlow(AccountStudyState())
+    val accountState: StateFlow<AccountStudyState> = mutableAccountState.asStateFlow()
+    private val mutableGenerationStage = MutableStateFlow(GenerationStage.Idle)
+    val generationStage: StateFlow<GenerationStage> = mutableGenerationStage.asStateFlow()
+    private val mutableNavigationTarget = MutableStateFlow<StudyNavigationTarget?>(null)
+    val navigationTarget: StateFlow<StudyNavigationTarget?> = mutableNavigationTarget.asStateFlow()
+
+    fun requestGeneratedQuiz() { mutableNavigationTarget.value = StudyNavigationTarget.Play }
+    fun requestResults() { mutableNavigationTarget.value = StudyNavigationTarget.Results }
+    fun requestEditorClose() { mutableNavigationTarget.value = StudyNavigationTarget.EditorClosed }
+    fun consumeNavigation() { mutableNavigationTarget.value = null }
+
+    fun bindAccount(coordinator: AccountStudyCoordinator?) {
+        scope.coroutineContext.cancelChildren()
+        account = coordinator
+        attempts.clear()
+        mutableState.value = StudyQuizState(isBusy = coordinator != null)
+        mutableAccountState.value = AccountStudyState()
+        mutableGenerationStage.value = GenerationStage.Idle
+        mutableReview.value = false
+        mutableNavigationTarget.value = null
+        mutableAccountOwner.value = coordinator?.ownerId
+        if (coordinator == null) return
+        scope.launch {
+            try {
+                coordinator.load()
+                mutableState.update { it.copy(isBusy = false) }
+                launch {
+                    coordinator.state.collect { value ->
+                        mutableAccountState.value = value
+                        mutableState.update { it.copy(quizzes = value.records.map { record -> record.quiz }) }
+                    }
+                }
+                try { coordinator.refresh() }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (error: Exception) { showMessage(error.message ?: "No se pudo consultar la nube. Los datos locales siguen disponibles.") }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { mutableState.update { it.copy(isBusy = false, message = error.message) } }
+        }
+    }
 
     init {
         scope.launch {
@@ -145,6 +196,7 @@ class StudyQuizViewModel(
 
     fun generateQuiz(onComplete: () -> Unit) {
         val initial = mutableState.value
+        initial.activeQuiz?.let { attempts[it.id] = initial.answers.toList() to initial.currentQuestionIndex }
         if (initial.isBusy) return
         if (initial.quizName.isBlank()) {
             showMessage("Escribe el nombre del cuestionario.")
@@ -166,19 +218,20 @@ class StudyQuizViewModel(
                     topic = initial.topic.trim(),
                     questions = generated
                 )
-                withContext(Dispatchers.IO) { repository.save(created) }
+                if (repository.canPersist) withContext(Dispatchers.IO) { repository.save(created) }
+                account?.addLocal(created)
                 created
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
                 mutableState.update {
-                    it.copy(isBusy = false, message = exception.message ?: "No se pudo generar y guardar el cuestionario.")
+                    it.copy(isBusy = false, message = exception.message ?: "No se pudo generar el cuestionario.")
                 }
                 return@launch
             }
             mutableState.update {
                 it.copy(
-                    quizzes = listOf(quiz) + it.quizzes,
+                    quizzes = listOf(quiz) + it.quizzes.filterNot { saved -> saved.id == quiz.id },
                     activeQuiz = quiz,
                     answers = List(quiz.questions.size) { null },
                     currentQuestionIndex = 0,
@@ -197,26 +250,33 @@ class StudyQuizViewModel(
         val current = mutableState.value
         if (current.isBusy) return false
         val quiz = current.quizzes.firstOrNull { it.id == id } ?: return false
+        current.activeQuiz?.let { attempts[it.id] = current.answers to current.currentQuestionIndex }
+        val attempt = attempts[id]
+        val saved = account?.record(id)
+        mutableReview.value = false
         mutableState.update {
-            it.copy(activeQuiz = quiz, answers = List(quiz.questions.size) { null }, currentQuestionIndex = 0, message = null)
+            it.copy(activeQuiz = quiz, answers = saved?.answers ?: attempt?.first ?: List(quiz.questions.size) { null }, currentQuestionIndex = saved?.currentIndex ?: attempt?.second ?: 0, message = null)
         }
         return true
     }
 
     fun selectAnswer(index: Int) {
         val current = mutableState.value
+        if (mutableReview.value) return
         if (current.isBusy) return
         val question = current.activeQuiz?.questions?.getOrNull(current.currentQuestionIndex) ?: return
         if (index !in question.answers.indices || current.answers.getOrNull(current.currentQuestionIndex) != null) return
         mutableState.update {
             it.copy(answers = it.answers.toMutableList().apply { set(current.currentQuestionIndex, index) })
         }
+        persistCurrentAttempt()
     }
 
     fun previousQuestion() {
         if (!mutableState.value.isBusy) mutableState.update {
             it.copy(currentQuestionIndex = (it.currentQuestionIndex - 1).coerceAtLeast(0))
         }
+        persistCurrentAttempt()
     }
 
     /** Devuelve true cuando la última pregunta está contestada y se puede finalizar. */
@@ -229,6 +289,7 @@ class StudyQuizViewModel(
         }
         if (current.currentQuestionIndex == current.activeQuiz.questions.lastIndex) return true
         mutableState.update { it.copy(currentQuestionIndex = it.currentQuestionIndex + 1) }
+        persistCurrentAttempt()
         return false
     }
 
@@ -236,6 +297,7 @@ class StudyQuizViewModel(
         val current = mutableState.value
         val quiz = current.activeQuiz ?: return
         if (current.isBusy) return
+        if (mutableReview.value) { onComplete(); return }
         if (current.answers.size != quiz.questions.size || current.answers.any { it == null }) {
             showMessage("Responde todas las preguntas antes de finalizar.")
             return
@@ -243,13 +305,31 @@ class StudyQuizViewModel(
         mutableState.update { it.copy(isBusy = true, message = null) }
         scope.launch {
             val completed = quiz.copy(completed = true)
+            var capturedLocally = false
             try {
-                withContext(Dispatchers.IO) { repository.save(completed) }
+                if (repository.canPersist) withContext(Dispatchers.IO) { repository.save(completed) }
+                account?.let { coordinator ->
+                    coordinator.capture(completed, current.answers, current.currentQuestionIndex)
+                    capturedLocally = true
+                    coordinator.synchronize(completed.id)
+                }
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
-                mutableState.update {
-                    it.copy(isBusy = false, message = "No se pudo guardar la finalización. Inténtalo de nuevo.")
+                if (capturedLocally) {
+                    mutableState.update {
+                        it.copy(
+                            activeQuiz = completed,
+                            quizzes = it.quizzes.map { saved -> if (saved.id == quiz.id) completed else saved },
+                            isBusy = false,
+                            message = "Finalizado localmente (pendiente de sincronizar): ${exception.message ?: "sin confirmación del servidor."}"
+                        )
+                    }
+                    onComplete()
+                } else {
+                    mutableState.update {
+                        it.copy(isBusy = false, message = exception.message ?: "No se pudo guardar la finalización. Inténtalo de nuevo.")
+                    }
                 }
                 return@launch
             }
@@ -267,12 +347,16 @@ class StudyQuizViewModel(
     fun resetAttempt() {
         val current = mutableState.value
         val quiz = current.activeQuiz ?: return
+        mutableReview.value = false
         if (!current.isBusy) mutableState.update {
-            it.copy(answers = List(quiz.questions.size) { null }, currentQuestionIndex = 0, message = null)
+            it.copy(activeQuiz = quiz.copy(completed = false), quizzes = it.quizzes.map { saved -> if (saved.id == quiz.id) saved.copy(completed = false) else saved },
+                answers = List(quiz.questions.size) { null }, currentQuestionIndex = 0, message = null)
         }
+        persistCurrentAttempt()
     }
 
     fun reviewAnswers() {
+        mutableReview.value = true
         if (!mutableState.value.isBusy) mutableState.update {
             it.copy(currentQuestionIndex = 0, message = null)
         }
@@ -280,6 +364,142 @@ class StudyQuizViewModel(
 
     fun clearMessage() {
         mutableState.update { it.copy(message = null) }
+    }
+
+    fun pauseQuiz(onComplete: () -> Unit) {
+        val current = mutableState.value
+        val quiz = current.activeQuiz ?: return
+        if (current.isBusy) return
+        attempts[quiz.id] = current.answers.toList() to current.currentQuestionIndex
+        val coordinator = account
+        if (coordinator != null) {
+            runAccountOperation {
+                coordinator.capture(quiz, current.answers, current.currentQuestionIndex)
+                try {
+                    coordinator.synchronize(quiz.id)
+                    showMessage(if (coordinator.record(quiz.id)?.remote != null) "El servidor confirmó las respuestas." else "Progreso guardado en este dispositivo para tu cuenta.")
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    showMessage("Progreso guardado en este dispositivo (pendiente de sincronizar): ${error.message ?: "sin confirmación del servidor."}")
+                }
+                onComplete()
+            }
+            return
+        }
+        showMessage("El progreso permanece en memoria mientras la aplicación siga abierta. No se ha guardado en disco ni en la nube.")
+        onComplete()
+    }
+
+    private fun persistCurrentAttempt() {
+        val coordinator = account ?: return
+        val current = mutableState.value
+        val quiz = current.activeQuiz ?: return
+        scope.launch {
+            try { coordinator.capture(quiz, current.answers, current.currentQuestionIndex) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { showMessage("No se pudo guardar el progreso local: ${error.message}") }
+        }
+    }
+
+    private fun runAccountOperation(block: suspend (AccountStudyCoordinator) -> Unit) {
+        val coordinator = account ?: run { showMessage("Inicia sesión para acceder a la nube."); return }
+        if (state.value.isBusy) return
+        mutableState.update { it.copy(isBusy = true, message = null) }
+        scope.launch {
+            try { block(coordinator) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { showMessage(error.message ?: "La operación no pudo completarse.") }
+            finally { mutableState.update { it.copy(isBusy = false) } }
+        }
+    }
+
+    fun refreshCloud(next: Boolean = false) = runAccountOperation { it.refresh(next) }
+    fun confirmGenerationReconciled() = runAccountOperation { it.confirmGenerationReconciled() }
+    fun uploadQuiz(id: String) = runAccountOperation {
+        val current = state.value
+        if (current.activeQuiz?.id == id) it.capture(current.activeQuiz, current.answers, current.currentQuestionIndex)
+        it.upload(id)
+        showMessage("El servidor confirmó el guardado en la nube. Las respuestas del intento se sincronizan por separado.")
+    }
+    fun synchronizeQuiz(id: String) = runAccountOperation {
+        val current = state.value
+        if (current.activeQuiz?.id == id) it.capture(current.activeQuiz, current.answers, current.currentQuestionIndex)
+        it.synchronize(id); showMessage("El servidor confirmó las respuestas.")
+    }
+    /** Valida precondiciones locales antes de abrir la pantalla de procesamiento remoto. */
+    fun startRemoteGeneration(onStarted: () -> Unit) {
+        val initial = mutableState.value
+        if (account == null) { showMessage("Inicia sesión para acceder a la nube."); return }
+        if (initial.isBusy) return
+        if (accountState.value.generationUncertain) {
+            showMessage("Consulta primero la nube y concilia la generación sin confirmar antes de volver a generar.")
+            return
+        }
+        val title = initial.quizName.trim()
+        if (title.isBlank() || title.length > 255) {
+            showMessage("Escribe un nombre válido de hasta 255 caracteres.")
+            return
+        }
+        if (initial.documents.isEmpty()) {
+            showMessage("Adjunta material antes de generar.")
+            return
+        }
+        if (initial.questionCount !in 1..15) {
+            showMessage("La generación remota admite entre 1 y 15 preguntas.")
+            return
+        }
+        val text = initial.documents.joinToString("\n\n") { it.text }
+        if (text.isBlank()) {
+            showMessage("Adjunta material con texto válido antes de generar.")
+            return
+        }
+        if (!(title + text).all { it.code <= 127 }) {
+            showMessage("El generador remoto solo acepta ASCII. Usa generación local para este material; no se eliminarán acentos.")
+            return
+        }
+        onStarted()
+        generateRemote { }
+    }
+
+    fun generateRemote(onComplete: () -> Unit) = runAccountOperation {
+        val initial = state.value
+        initial.activeQuiz?.let { attempts[it.id] = initial.answers.toList() to initial.currentQuestionIndex }
+        mutableGenerationStage.value = GenerationStage.Preparing
+        try {
+            require(initial.documents.isNotEmpty()) { "Adjunta material antes de generar." }
+            mutableGenerationStage.value = GenerationStage.Requesting
+            val record = it.generate(initial.quizName.trim(), initial.documents.joinToString("\n\n") { document -> document.text }, initial.questionCount)
+            mutableGenerationStage.value = GenerationStage.Received
+            mutableState.update { value -> value.copy(activeQuiz = record.quiz, answers = record.answers, currentQuestionIndex = 0,
+                quizName = "", topic = "", documents = emptyList()) }
+            mutableGenerationStage.value = GenerationStage.Validated
+            onComplete()
+        } catch (error: Exception) { mutableGenerationStage.value = GenerationStage.Failed; throw error }
+    }
+    fun editQuiz(id: String, title: String, questions: List<EditedQuestion>, onComplete: () -> Unit) = runAccountOperation {
+        it.edit(id, title, questions)
+        if (state.value.activeQuiz?.id == id) {
+            val record = it.record(id) ?: return@runAccountOperation
+            mutableState.update { value -> value.copy(activeQuiz = record.quiz, answers = record.answers, currentQuestionIndex = record.currentIndex) }
+        }
+        onComplete()
+    }
+    fun deleteQuiz(id: String) = runAccountOperation {
+        it.delete(id)
+        attempts.remove(id)
+        if (state.value.activeQuiz?.id == id) mutableState.update { value -> value.copy(activeQuiz = null, answers = emptyList(), currentQuestionIndex = 0) }
+    }
+    fun acceptServerVersion(id: String) = runAccountOperation {
+        it.acceptServerVersion(id)
+        if (state.value.activeQuiz?.id == id) {
+            val record = it.record(id) ?: return@runAccountOperation
+            mutableState.update { value -> value.copy(activeQuiz = record.quiz, answers = record.answers, currentQuestionIndex = 0) }
+        }
+    }
+    fun inspectServerVersion(id: String) = runAccountOperation {
+        val latest = it.latest(id)
+        showMessage("Versión del servidor: ${latest.version}. ${latest.title}\n${latest.questions.size} preguntas. Tus cambios y respuestas locales siguen conservados.")
     }
 
     private fun showMessage(message: String) {

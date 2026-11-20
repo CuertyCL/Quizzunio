@@ -49,6 +49,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cl.quizzunio.ui.theme.QuizzunioTheme
 import cl.quizzunio.ui.theme.extendedColors
+import cl.quizzunio.auth.LocalAuthViewModel
+import cl.quizzunio.auth.SessionState
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.CircularProgressIndicator
 
 /**
  * Modelo de datos simple para la lista de cuestionarios
@@ -72,6 +76,10 @@ fun QuizHomeScreen(
     onQuizClick: (String) -> Unit = {}
 ) {
     val studyState = LocalStudyQuizViewModel.current?.state?.collectAsState()?.value
+    val studyModel = LocalStudyQuizViewModel.current
+    val account = studyModel?.accountState?.collectAsState()?.value
+    val auth = LocalAuthViewModel.current?.state?.collectAsState()?.value
+    val user = (auth?.session as? SessionState.Authenticated)?.user
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilterIndex by remember { mutableIntStateOf(0) }
     val filters = listOf("Todos", "Recientes", "Completados")
@@ -127,6 +135,23 @@ fun QuizHomeScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 20.dp)
         ) {
+            Text(if (user == null) "Modo anónimo Free · Tus cuestionarios solo permanecen en memoria. Inicia sesión desde Ajustes para acceder a tu cuenta."
+                else "${user.username} · ${user.tier.name} · Búsqueda y filtros sobre los cuestionarios cargados.")
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (studyState?.isBusy == true || account?.busy == true) CircularProgressIndicator()
+            if (user != null) {
+                Row {
+                    TextButton(onClick = { studyModel?.refreshCloud() }, enabled = studyState?.isBusy != true) { Text("Actualizar nube") }
+                    TextButton(onClick = { studyModel?.refreshCloud(true) }, enabled = studyState?.isBusy != true && account?.hasMore == true) { Text("Cargar más") }
+                }
+                account?.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                if (account?.generationUncertain == true) {
+                    Text("La generación anterior no tiene confirmación. Actualiza la nube y revisa todos los resultados antes de repetirla.")
+                    TextButton(onClick = { studyModel?.confirmGenerationReconciled() }, enabled = account.page > 0 && account.error == null) { Text("Revisé la nube y concilié la generación") }
+                }
+            }
+            if (sampleQuizzes.isEmpty() && studyState?.isBusy != true) Text("No hay cuestionarios que coincidan con la búsqueda y el filtro.")
             // Botón Crear Cuestionario
             Button(
                 onClick = onCreateQuizClick,
@@ -223,6 +248,7 @@ fun QuizHomeScreen(
                         quiz = quiz,
                         onClick = { onQuizClick(quiz.id) }
                     )
+                    account?.records?.firstOrNull { it.quiz.id == quiz.id }?.let { AccountQuizActions(it) }
                 }
             }
         }
