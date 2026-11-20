@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import cl.quizzunio.auth.*
+import cl.quizzunio.network.ApiConfiguration
 import cl.quizzunio.study.*
 import androidx.compose.ui.platform.testTag
 
@@ -18,6 +19,7 @@ fun AccountSettingsPanel() {
     val auth by model.state.collectAsState()
     val user = (auth.session as? SessionState.Authenticated)?.user
     var endpoint by remember(auth.server) { mutableStateOf(auth.server) }
+    var pendingHttpUrl by remember { mutableStateOf<String?>(null) }
     var currentPassword by remember { mutableStateOf("") }
     var replacement by remember { mutableStateOf("") }
     var deleting by remember { mutableStateOf(false) }
@@ -27,8 +29,12 @@ fun AccountSettingsPanel() {
         if (user != null) Text(user.email)
         OutlinedTextField(endpoint, { endpoint = it }, label = { Text("URL del servidor") },
             enabled = !auth.busy && user == null, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Text("Usa HTTPS con certificado válido. En Debug, HTTP admite 10.0.2.2 (equipo anfitrión del emulador) y 127.0.0.1 (túnel explícito).")
-        if (user == null) TextButton(onClick = { model.configureServer(endpoint) }, enabled = !auth.busy) { Text("Aplicar servidor") }
+        Text("Se recomienda HTTPS con certificado válido (predeterminado https://10.0.2.2:8443). HTTP sin cifrado requiere confirmación explícita y solo debe usarse en redes controladas (LAN o VPN).")
+        if (user == null) TextButton(onClick = {
+            val candidate = runCatching { ApiConfiguration(endpoint, false) }.getOrNull()
+            if (candidate != null && candidate.isCleartext) pendingHttpUrl = candidate.baseUrl
+            else model.configureServer(endpoint)
+        }, enabled = !auth.busy) { Text("Aplicar servidor") }
         TextButton(onClick = { model.checkStatus() }, enabled = !auth.busy) { Text("Comprobar estado del servidor") }
         auth.status?.let { Text(it) }
         if (user != null) {
@@ -41,6 +47,10 @@ fun AccountSettingsPanel() {
             TextButton(onClick = { abandoning = true }, enabled = !auth.busy) { Text("Abandonar sesión solo en este dispositivo") }
         }
     }
+    pendingHttpUrl?.let { target -> AlertDialog(onDismissRequest = { pendingHttpUrl = null }, title = { Text("Conexión HTTP sin cifrado") },
+        text = { Text("La dirección «$target» usa HTTP sin cifrado de transporte. Tus credenciales, tokens y cuestionarios se enviarán sin cifrar por la red.\n\nÚsala únicamente en una red controlada (LAN o VPN de confianza).") },
+        confirmButton = { TextButton(onClick = { pendingHttpUrl = null; model.configureServer(target, confirmCleartext = true) }) { Text("Confirmar uso de HTTP") } },
+        dismissButton = { TextButton(onClick = { pendingHttpUrl = null }) { Text("Cancelar") } }) }
     if (deleting) AlertDialog(onDismissRequest = { deleting = false }, title = { Text("Eliminar cuenta") },
         text = { Text("Se eliminarán tu cuenta, cuestionarios y sesiones del servidor. Esta operación no se puede deshacer.") },
         confirmButton = { TextButton(onClick = { deleting = false; model.deleteAccount(currentPassword); currentPassword = "" }) { Text("Confirmar eliminación") } },

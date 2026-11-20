@@ -10,13 +10,79 @@ import org.junit.Test
 
 /** HTTP real con servidor efímero; no certifica la integración con QuizzunioServer. */
 class HttpTransportTest {
-    @Test fun configurationRequiresHttpsOutsideExplicitDebugLoopback() {
+    @Test fun configurationAllowsHttpsAndExplicitHttpAcrossTopologiesAndRejectsMalformed() {
         assertEquals("https://example.com:8443", ApiConfiguration("https://example.com:8443/").baseUrl)
-        assertEquals("http://10.0.2.2:8080", ApiConfiguration("http://10.0.2.2:8080", true).baseUrl)
-        listOf("http://example.com", "https://user:secret@example.com", "https://example.com/a", "https://example.com?secret=x").forEach {
-            assertThrows(IllegalArgumentException::class.java) { ApiConfiguration(it) }
+        assertFalse(ApiConfiguration("https://example.com:8443/").isCleartext)
+
+        val tunnel = ApiConfiguration("https://ejemplo.trycloudflare.com")
+        assertEquals("https://ejemplo.trycloudflare.com", tunnel.baseUrl)
+        assertFalse(tunnel.isCleartext)
+
+        listOf(
+            "http://10.0.2.2:8080" to true,
+            "http://10.0.2.2:8080" to false,
+            "http://127.0.0.1:8080" to false,
+            "http://192.168.1.100:8080" to false,
+            "http://10.8.0.1:8080" to false,
+            "http://quizzunio.local:8080" to false,
+            "http://vpn-server:8080" to false,
+            "http://[::1]:8080" to false
+        ).forEach { (url, dev) ->
+            val config = ApiConfiguration(url, dev)
+            assertEquals(url, config.baseUrl)
+            assertTrue(config.isCleartext)
         }
-        assertThrows(IllegalArgumentException::class.java) { ApiConfiguration("http://10.0.2.2:8080") }
+
+        listOf(
+            "",
+            "   ",
+            "http://",
+            "ftp://192.168.1.100:8080",
+            "https://user:secret@example.com",
+            "http://user:secret@192.168.1.100:8080",
+            "https://example.com/a",
+            "https://example.com?secret=x",
+            "http://192.168.1.100:8080#frag",
+            "http://192.168.1.100:0",
+            "http://192.168.1.100:70000",
+            "http://192.168.1.100:abc"
+        ).forEach { malformed ->
+            assertThrows("Debe rechazar $malformed", IllegalArgumentException::class.java) {
+                ApiConfiguration(malformed)
+            }
+        }
+    }
+
+    @Test fun releaseConfigurationExecutesHttpAndDoesNotDowngradeFailedHttpsToHttp() = runBlocking {
+        var httpHits = 0
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/status") { exchange ->
+            httpHits++
+            val body = "{\"server\":{\"status\":\"UP\",\"transport\":\"HTTP\",\"uptimeSeconds\":1},\"database\":{\"status\":\"UP\",\"dbms\":\"mariadb\",\"connected\":true}}".toByteArray()
+            exchange.responseHeaders.set("Content-Type", "application/json; charset=utf-8")
+            exchange.sendResponseHeaders(200, body.size.toLong())
+            exchange.responseBody.use { it.write(body) }
+        }
+        server.start()
+        try {
+            val port = server.address.port
+            // Simula compilación Release (development = false) usando HTTP explícito.
+            val httpClient = ApiClient(ApiConfiguration("http://127.0.0.1:$port", development = false), UrlConnectionTransport())
+            val body = httpClient.request("GET", "/status", 200)
+            assertTrue(body.contains("\"transport\":\"HTTP\""))
+            assertEquals(1, httpHits)
+
+            // HTTPS contra un puerto que habla HTTP plano debe fallar TLS sin hacer downgrade automático a HTTP.
+            val httpsClient = ApiClient(ApiConfiguration("https://127.0.0.1:$port", development = false), UrlConnectionTransport())
+            try {
+                httpsClient.request("GET", "/status", 200)
+                fail("HTTPS no debe hacer fallback silencioso a HTTP")
+            } catch (expected: ApiException) {
+                assertEquals(0, expected.status)
+                assertEquals("NETWORK_ERROR", expected.code)
+            }
+            assertEquals(1, httpHits)
+        } finally { server.stop(0) }
     }
 
     @Test fun sendsUtf8AndBearerAndDoesNotFollowRedirects() = runBlocking {

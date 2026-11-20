@@ -81,6 +81,9 @@ class ServerIntegrationRegressionTest {
     private fun configureServer(url: String) {
         ui.onNodeWithContentDescription("Ajustes").performClick()
         field(0, url); click("Aplicar servidor")
+        if (ui.onAllNodesWithText("Confirmar uso de HTTP").fetchSemanticsNodes().isNotEmpty()) {
+            click("Confirmar uso de HTTP")
+        }
         ui.waitUntil(30_000) { auth.state.value.server == url && !auth.state.value.busy }
         back()
     }

@@ -22,7 +22,7 @@ class AuthViewModel(context: Context) : ViewModel() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mutableState = MutableStateFlow(AuthUiState())
     val state: StateFlow<AuthUiState> = mutableState.asStateFlow()
-    var client: ApiClient = createClient(preferences.getString("base_url", null) ?: "https://10.0.2.2:8443")
+    var client: ApiClient = createClient(initialServer())
         private set
     var session: SessionRepository = createSession()
         private set
@@ -30,6 +30,15 @@ class AuthViewModel(context: Context) : ViewModel() {
     private var noticeObserver: Job? = null
 
     init { observeSession(); runOperation { session.restore() } }
+
+    private fun initialServer(): String {
+        val saved = preferences.getString("base_url", null) ?: return DEFAULT_SERVER
+        val config = runCatching { ApiConfiguration(saved, development) }.getOrNull() ?: return DEFAULT_SERVER
+        if (config.isCleartext && preferences.getString("confirmed_http_url", null) != config.baseUrl) {
+            return DEFAULT_SERVER
+        }
+        return config.baseUrl
+    }
 
     private fun createClient(url: String) = ApiClient(ApiConfiguration(url, development), UrlConnectionTransport())
     private fun createSession() = SessionRepository(AuthApi(client), KeystoreTokenStore(appContext), client.configuration.baseUrl)
@@ -64,10 +73,22 @@ class AuthViewModel(context: Context) : ViewModel() {
         val status = StatusApi(client).read()
         mutableState.update { it.copy(status = status.description) }
     }
-    fun configureServer(value: String) = runOperation {
+    fun configureServer(value: String) = configureServer(value, confirmCleartext = false)
+
+    /** Configura una nueva URL de servidor; HTTP sin cifrado requiere confirmación explícita del usuario. */
+    fun configureServer(value: String, confirmCleartext: Boolean) = runOperation {
         check(state.value.session is SessionState.Anonymous) { "Abandona o cierra la sesión antes de cambiar de servidor." }
-        val replacement = createClient(value)
-        withContext(Dispatchers.IO) { check(preferences.edit().putString("base_url", replacement.configuration.baseUrl).commit()) }
+        val config = ApiConfiguration(value, development)
+        require(!config.isCleartext || confirmCleartext) {
+            "La conexión HTTP sin cifrado requiere confirmación explícita para una red controlada."
+        }
+        val replacement = ApiClient(config, UrlConnectionTransport())
+        withContext(Dispatchers.IO) {
+            val editor = preferences.edit().putString("base_url", config.baseUrl)
+            if (config.isCleartext) editor.putString("confirmed_http_url", config.baseUrl)
+            else editor.remove("confirmed_http_url")
+            check(editor.commit())
+        }
         client = replacement; session = createSession(); observeSession(); session.restore()
         mutableState.update { it.copy(status = null) }
     }
@@ -97,6 +118,10 @@ class AuthViewModel(context: Context) : ViewModel() {
         }
     }
     override fun onCleared() { scope.cancel(); super.onCleared() }
+
+    private companion object {
+        const val DEFAULT_SERVER = "https://10.0.2.2:8443"
+    }
 }
 
 val LocalAuthViewModel = staticCompositionLocalOf<AuthViewModel?> { null }

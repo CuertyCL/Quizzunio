@@ -3,8 +3,10 @@ package cl.quizzunio.network
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URI
+import java.net.URISyntaxException
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -13,16 +15,24 @@ import kotlin.coroutines.resumeWithException
 
 class ApiConfiguration(baseUrl: String, val development: Boolean = false) {
     val baseUrl: String
+    val isCleartext: Boolean
     init {
-        val uri = URI(baseUrl)
-        require(uri.host != null && uri.userInfo == null && uri.query == null && uri.fragment == null) {
+        val trimmed = baseUrl.trim()
+        val uri = try {
+            URI(trimmed)
+        } catch (error: URISyntaxException) {
+            throw IllegalArgumentException("Escribe una URL válida de servidor (https:// o http://).", error)
+        }
+        val scheme = uri.scheme?.lowercase(Locale.ROOT)
+        require(scheme == "https" || scheme == "http") { "Usa una URL con esquema https:// o http://." }
+        require(uri.isAbsolute && !uri.isOpaque) { "Escribe una URL completa con formato https://host o http://host." }
+        require(!uri.host.isNullOrBlank() && uri.userInfo == null && uri.query == null && uri.fragment == null) {
             "Escribe una URL de servidor sin credenciales, parámetros ni fragmentos."
         }
+        require(uri.port == -1 || uri.port in 1..65535) { "El puerto del servidor debe estar entre 1 y 65535." }
         require(uri.path.isNullOrEmpty() || uri.path == "/") { "La URL debe indicar la raíz del servidor." }
-        require(uri.scheme == "https" || (development && uri.scheme == "http" && uri.host in setOf("10.0.2.2", "127.0.0.1"))) {
-            "Usa HTTPS. HTTP de desarrollo solo se permite para 10.0.2.2 o 127.0.0.1."
-        }
-        this.baseUrl = uri.toASCIIString().trimEnd('/')
+        this.isCleartext = scheme == "http"
+        this.baseUrl = URI(scheme, null, uri.host, uri.port, null, null, null).toASCIIString().trimEnd('/')
     }
 }
 

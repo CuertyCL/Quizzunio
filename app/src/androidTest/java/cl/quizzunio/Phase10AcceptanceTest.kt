@@ -84,6 +84,9 @@ class Phase10AcceptanceTest {
     private fun configureServerThroughUi() {
         ui.onNodeWithContentDescription("Ajustes").performClick()
         field(0, baseUrl); click("Aplicar servidor")
+        if (ui.onAllNodesWithText("Confirmar uso de HTTP").fetchSemanticsNodes().isNotEmpty()) {
+            click("Confirmar uso de HTTP")
+        }
         ui.waitUntil(30_000) { auth.state.value.server == baseUrl && !auth.state.value.busy }
         back()
     }
