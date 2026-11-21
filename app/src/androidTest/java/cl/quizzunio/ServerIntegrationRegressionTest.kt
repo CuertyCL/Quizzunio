@@ -284,31 +284,25 @@ class ServerIntegrationRegressionTest {
         ui.onNodeWithText("Generando con IA").assertDoesNotExist()
         dismissMessages()
 
-        // Título no ASCII + documento: tampoco debe navegar a AiProcessingScreen.
-        field(0, "Biología $runId")
-        selectDocument("P", asciiMaterial)
-        click("Generar en servidor")
-        ui.onNodeWithText("Generando con IA").assertDoesNotExist()
-        dismissMessages()
-
-        // Cantidad > 15: tampoco debe navegar.
-        field(0, "Biology $runId")
-        repeat(6) { click("+") }
-        assertEquals(16, study.state.value.questionCount)
-        click("Generar en servidor")
-        ui.onNodeWithText("Generando con IA").assertDoesNotExist()
-        dismissMessages()
+        val title = "Biología 漢字 😀 $runId"
+        val material = "$asciiMaterial\n\n  Energía\t∑, n\u0303, 中文, 😀 y 𐐀.\n"
+        field(0, title)
+        selectDocument("P", material)
+        assertEquals(material, study.state.value.documents.single().text)
+        repeat(5) { click("+") }
+        assertEquals(15, study.state.value.questionCount)
+        ui.onNodeWithText("+").assertIsNotEnabled()
         assertEquals(before.optInt("POST /quizzes"), control("/acceptance/metrics").optInt("POST /quizzes"))
 
-        // Entrada válida ASCII con 2 preguntas -> llama a QuizzunioServer + stub sintético local (sin IA real).
-        repeat(14) { click("−") }
+        // Material Unicode con dos preguntas y proveedor sintético local.
+        repeat(13) { click("−") }
         assertEquals(2, study.state.value.questionCount)
         click("Generar en servidor")
         ui.onNodeWithText("Generando con IA").assertExists()
         ui.waitUntil(30_000) { study.generationStage.value == GenerationStage.Validated || study.generationStage.value == GenerationStage.Failed }
         assertEquals("La generación sintética debe validarse: ${study.state.value.message}", GenerationStage.Validated, study.generationStage.value)
         click("Continuar al cuestionario")
-        val record = study.accountState.value.records.single { it.quiz.title == "Biology $runId" }
+        val record = study.accountState.value.records.single { it.quiz.title == title }
         assertNotNull(record.remote)
         assertEquals(QuizOrigin.Server, record.origin)
         assertEquals(1, control("/acceptance/metrics").optInt("synthetic_ai_requests"))

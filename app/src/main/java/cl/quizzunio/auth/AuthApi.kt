@@ -7,12 +7,15 @@ import org.json.JSONObject
 
 class AuthApi(private val client: ApiClient) : AuthGateway {
     override suspend fun login(identifier: String, password: String): TokenPair {
-        CredentialValidator.identifier(identifier); CredentialValidator.password(password, false)
-        return tokens(client.request("POST", "/auth/login", 200, JSONObject().put("identifier", identifier).put("password", password)))
+        val canonicalIdentifier = CredentialValidator.canonicalIdentifier(identifier)
+        CredentialValidator.password(password, false)
+        return tokens(client.request("POST", "/auth/login", 200, JSONObject().put("identifier", canonicalIdentifier).put("password", password)))
     }
     override suspend fun register(username: String, email: String, password: String): TokenPair {
-        CredentialValidator.username(username); CredentialValidator.email(email); CredentialValidator.password(password, true)
-        return tokens(client.request("POST", "/auth/register", 201, JSONObject().put("username", username).put("email", email).put("password", password)))
+        val canonicalUsername = CredentialValidator.canonicalUsername(username)
+        CredentialValidator.email(email)
+        CredentialValidator.password(password, true)
+        return tokens(client.request("POST", "/auth/register", 201, JSONObject().put("username", canonicalUsername).put("email", email).put("password", password)))
     }
     override suspend fun refresh(refreshToken: String): TokenPair = tokens(client.request("POST", "/auth/refresh", 200, JSONObject().put("refreshToken", refreshToken)))
     override suspend fun me(token: String): UserIdentity = decodeResponse {

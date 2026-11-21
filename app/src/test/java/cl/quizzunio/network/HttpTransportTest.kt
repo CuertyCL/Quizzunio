@@ -73,7 +73,7 @@ class HttpTransportTest {
             assertEquals(1, httpHits)
 
             // HTTPS contra un puerto que habla HTTP plano debe fallar TLS sin hacer downgrade automático a HTTP.
-            val httpsClient = ApiClient(ApiConfiguration("https://127.0.0.1:$port", development = false), UrlConnectionTransport())
+            val httpsClient = ApiClient(ApiConfiguration("https://127.0.0.1:$port", development = false), UrlConnectionTransport(readTimeoutMillis = 1500))
             try {
                 httpsClient.request("GET", "/status", 200)
                 fail("HTTPS no debe hacer fallback silencioso a HTTP")
@@ -104,6 +104,30 @@ class HttpTransportTest {
             val response = transport.send("POST", "$base/echo", mapOf("Authorization" to "Bearer opaque"), "{\"texto\":\"Biología ñ 🧠\"}")
             assertEquals(200, response.status); assertEquals("{\"texto\":\"Biología ñ 🧠\"}", response.body)
             assertEquals(302, transport.send("GET", "$base/redirect", mapOf("Authorization" to "Bearer opaque"), null).status)
+        } finally { server.stop(0) }
+    }
+
+    @Test fun limitsQueryUsesBearerAndDisablesCacheWithoutSendingMaterial() = runBlocking {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        val count = java.util.concurrent.atomic.AtomicInteger()
+        server.createContext("/quizzes/limits") { exchange ->
+            val valid = exchange.requestMethod == "GET" &&
+                exchange.requestHeaders.getFirst("Authorization") == "Bearer exact-token" &&
+                exchange.requestHeaders.getFirst("Cache-Control") == "no-store" &&
+                exchange.requestBody.use { it.read() == -1 }
+            val bytes = """{"maxTextBytes":${count.incrementAndGet()},"encoding":"UTF-8"}""".toByteArray(Charsets.UTF_8)
+            exchange.responseHeaders.set("Cache-Control", "no-store")
+            exchange.sendResponseHeaders(if (valid) 200 else 400, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        server.start()
+        try {
+            val client = ApiClient(ApiConfiguration("http://127.0.0.1:${server.address.port}"), UrlConnectionTransport())
+            for (limit in 1..2) {
+                assertEquals("""{"maxTextBytes":$limit,"encoding":"UTF-8"}""",
+                    client.request("GET", "/quizzes/limits", 200, token = "exact-token"))
+            }
+            assertEquals(2, count.get())
         } finally { server.stop(0) }
     }
 

@@ -51,6 +51,9 @@ fun AiProcessingScreen(
 ) {
     val model = LocalStudyQuizViewModel.current
     val stage = model?.generationStage?.collectAsState()?.value ?: GenerationStage.Idle
+    val study = model?.state?.collectAsState()?.value
+    val uncertain = model?.accountState?.collectAsState()?.value?.generationUncertain == true
+    val canRetry = stage == GenerationStage.Failed && !uncertain && study?.isBusy == false
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -87,8 +90,9 @@ fun AiProcessingScreen(
                 Text(
                     text = when (stage) {
                         GenerationStage.Validated -> "Cuestionario recibido y validado"
-                        GenerationStage.Failed -> "No se confirmó la generación"
+                        GenerationStage.Failed -> if (uncertain) "No se confirmó la generación" else "No se pudo generar el cuestionario"
                         GenerationStage.Idle -> "No hay una generación en curso"
+                        GenerationStage.Preparing -> "Consultando el límite de texto del servidor"
                         else -> "Solicitud de generación en curso"
                     },
                     style = MaterialTheme.typography.headlineSmall.copy(
@@ -103,7 +107,8 @@ fun AiProcessingScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "El servidor responde al terminar. Si pierdes la conexión, puede completar y guardar el trabajo; consulta la nube antes de repetirlo.",
+                    text = if (uncertain) "Si se pierde la conexión, el servidor puede completar y guardar el trabajo. Consulta la nube antes de repetirlo."
+                        else "El servidor comprobará el texto extraído antes de generar.",
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontSize = 13.sp
                     ),
@@ -189,8 +194,8 @@ fun AiProcessingScreen(
 
                 // Botón interactivo para avanzar cuando finalice la generación
                 Button(
-                    onClick = onProcessingComplete,
-                    enabled = stage == GenerationStage.Validated,
+                    onClick = { if (canRetry) model?.generateRemote {} else onProcessingComplete() },
+                    enabled = stage == GenerationStage.Validated || canRetry,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp),
@@ -201,7 +206,7 @@ fun AiProcessingScreen(
                     )
                 ) {
                     Text(
-                        text = "Continuar al cuestionario",
+                        text = if (stage == GenerationStage.Failed && !uncertain) "Reintentar" else "Continuar al cuestionario",
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontWeight = FontWeight.Bold
                         )

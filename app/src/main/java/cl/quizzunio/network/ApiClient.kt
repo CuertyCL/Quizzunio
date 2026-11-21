@@ -1,6 +1,8 @@
 package cl.quizzunio.network
 
 import java.io.IOException
+import java.net.SocketTimeoutException
+import java.nio.charset.CharacterCodingException
 import kotlinx.coroutines.CancellationException
 import org.json.JSONException
 import org.json.JSONObject
@@ -12,14 +14,26 @@ class ApiClient(val configuration: ApiConfiguration, private val transport: Http
                         token: String? = null, headers: Map<String, String> = emptyMap()): String {
         require(path.startsWith('/') && !path.startsWith("//"))
         val encoded = body?.toString()
-        require(encoded == null || encoded.toByteArray(Charsets.UTF_8).size <= if (path.startsWith("/auth")) 16384 else 1_000_000) {
+        val serverValidatesQuizBody = path == "/quizzes" || path == "/quizzes/import" ||
+            (method == "PUT" && QUIZ_DOCUMENT_PATH.matches(path))
+        require(encoded == null || serverValidatesQuizBody ||
+            encoded.toByteArray(Charsets.UTF_8).size <= if (path.startsWith("/auth")) 16384 else 1_000_000) {
             "La solicitud supera el tamaño admitido por el servidor."
         }
         val response = try {
             transport.send(method, configuration.baseUrl + path,
                 headers + if (token != null) mapOf("Authorization" to "Bearer $token") else emptyMap(), encoded)
         } catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: ResponseTooLargeException) {
+            throw ApiException(0, "RESPONSE_TOO_LARGE", "La respuesta del servidor supera el límite de lectura de la aplicación.")
+        }
+        catch (error: CharacterCodingException) {
+            throw ApiException(200, "INVALID_RESPONSE", "La respuesta del servidor contiene UTF-8 inválido.")
+        }
         catch (error: IOException) {
+            if (error is SocketTimeoutException && path == "/quizzes/limits") {
+                throw ApiException(0, "TIMEOUT", "El servidor tardó demasiado en responder.")
+            }
             throw ApiException(0, "NETWORK_ERROR", if (method == "GET") "No se pudo conectar con el servidor."
                 else "No se recibió confirmación. El servidor puede haber completado la operación; consulta su estado antes de repetirla.")
         }
@@ -37,14 +51,24 @@ class ApiClient(val configuration: ApiConfiguration, private val transport: Http
                     "QUIZ_GENERATION_IN_PROGRESS" -> "Ya hay una generación de cuestionario en curso para esta cuenta."
                     else -> "La operación presenta un conflicto; consulta el estado antes de repetirla."
                 }
+                413 -> when (code) {
+                    "SOURCE_TEXT_TOO_LARGE" -> "El texto supera el límite vigente del servidor. Quita o divide el material y vuelve a intentarlo."
+                    "REQUEST_TOO_LARGE" -> "El cuerpo de la solicitud supera el tamaño que admite el servidor."
+                    else -> "El servidor rechazó la solicitud por su tamaño."
+                }
                 429 -> "Inicio de sesión bloqueado temporalmente. Espera ${response.retryAfterSeconds ?: "los"} segundos indicados por el servidor."
-                500, 502, 503 -> "El servidor no pudo completar la operación ($code)."
+                500, 502, 503 -> if (code == "AI_CONTEXT_LIMIT") "El material supera la capacidad del modelo de IA. Quita o divide el material."
+                    else "El servidor no pudo completar la operación ($code)."
                 else -> "Respuesta HTTP inesperada (${response.status})."
             }
             throw ApiException(response.status, code, message, response.retryAfterSeconds)
         }
         if (expected == 204 && response.body.isNotEmpty()) throw ApiException(204, "INVALID_RESPONSE", "El servidor devolvió una confirmación inesperada.")
         return response.body
+    }
+
+    private companion object {
+        val QUIZ_DOCUMENT_PATH = Regex("/quizzes/[0-9]+")
     }
 }
 

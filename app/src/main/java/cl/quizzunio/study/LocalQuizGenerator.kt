@@ -1,6 +1,7 @@
 package cl.quizzunio.study
 
 import cl.quizzunio.core.QuizQuestion
+import cl.quizzunio.core.hasValidUnicode
 import java.text.Normalizer
 import java.util.Locale
 import kotlin.math.abs
@@ -15,13 +16,16 @@ class LocalQuizGenerator {
         require(questionCount in 1..MAX_QUESTIONS) {
             "La cantidad de preguntas debe estar entre 1 y $MAX_QUESTIONS."
         }
-        require(text.length <= MAX_TEXT_LENGTH) {
+        require(text.codePointCount(0, text.length) <= MAX_TEXT_LENGTH) {
             "El material es demasiado extenso. Divídelo en archivos más pequeños."
         }
+        require(text.hasValidUnicode()) { "El material contiene una secuencia Unicode inválida." }
 
-        val sentences = SENTENCE_SEPARATOR.splitToSequence(text.replace('\r', '\n'))
-            .map { WHITESPACE.replace(it, " ").trim().trimStart('•', '–', '—').trim() }
-            .filter { it.length in MIN_SENTENCE_LENGTH..MAX_SENTENCE_LENGTH }
+        val sentences = SENTENCE_SEPARATOR.splitToSequence(text)
+            .filter {
+                val comparison = WHITESPACE.replace(it, " ").trim()
+                comparison.codePointCount(0, comparison.length) in MIN_SENTENCE_LENGTH..MAX_SENTENCE_LENGTH
+            }
             .filter { WORD.findAll(it).count() in 7..75 }
             .distinctBy(::normalize)
             .take(MAX_SENTENCES)
@@ -84,11 +88,13 @@ class LocalQuizGenerator {
             if (alternatives.size != 3) continue
 
             val answers = (alternatives + candidate.answer).shuffled(random)
-            questions += QuizQuestion(
+            val question = QuizQuestion(
                 question = "Según el material, completa la cita con el concepto que falta:\n«${candidate.prompt}»",
                 answers = answers,
                 correctAnswer = answers.indexOf(candidate.answer)
             )
+            QuizContentValidator.question(question.question, question.answers, question.correctAnswer)
+            questions += question
             usedSentences += candidate.sentenceKey
             usedAnswers += candidate.answerKey
             usedPrompts += candidate.promptKey
@@ -108,11 +114,11 @@ class LocalQuizGenerator {
     }
 
     private fun definitionCandidate(sentence: String): Candidate? {
-        val match = DEFINITION.find(sentence) ?: return null
+        val match = DEFINITION.find(sentence.trimStart { it.isWhitespace() || it in "•–—" }) ?: return null
         val subject = match.groups[1] ?: return null
         val answer = subject.value.trim()
         val words = WORD.findAll(answer).map { normalize(it.value) }.toList()
-        if (words.size !in 1..6 || answer.length !in 3..70) return null
+        if (words.size !in 1..6 || answer.codePointCount(0, answer.length) !in 3..70) return null
         if (words.all { it in STOP_WORDS } || words.any { it in INVALID_SUBJECT_WORDS }) return null
         if (normalize(answer) in GENERIC_SUBJECTS) return null
         return Candidate(sentence, answer, 2)
@@ -120,7 +126,7 @@ class LocalQuizGenerator {
 
     private fun isUsefulWord(value: String): Boolean {
         val key = normalize(value)
-        return value.length in 6..30 && key !in STOP_WORDS && key !in GENERIC_SUBJECTS
+        return value.codePointCount(0, value.length) in 6..30 && key !in STOP_WORDS && key !in GENERIC_SUBJECTS
     }
 
     private fun containsTerm(sentence: String, term: String): Boolean =
@@ -150,7 +156,7 @@ class LocalQuizGenerator {
     }
 
     private companion object {
-        const val MAX_QUESTIONS = 50
+        const val MAX_QUESTIONS = QuizContentValidator.MAX_QUESTIONS
         const val MAX_TEXT_LENGTH = 2_000_000
         const val MAX_SENTENCES = 2_500
         const val MAX_TERMS = 1_500
@@ -158,7 +164,7 @@ class LocalQuizGenerator {
         const val MIN_SENTENCE_LENGTH = 45
         const val MAX_SENTENCE_LENGTH = 500
         val WORD = Regex("[\\p{L}][\\p{L}\\p{M}]*(?:[-’'][\\p{L}\\p{M}]+)*")
-        val SENTENCE_SEPARATOR = Regex("(?<=[.!?])\\s+|\\n+")
+        val SENTENCE_SEPARATOR = Regex("(?<=[.!?。！？])\\s+|[\\r\\n]+")
         val WHITESPACE = Regex("\\s+")
         val MARKS = Regex("\\p{M}+")
         val NON_WORD = Regex("[^\\p{L}\\p{N}]+")

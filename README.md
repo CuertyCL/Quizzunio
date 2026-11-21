@@ -5,7 +5,7 @@ Quizzunio es una aplicación Android en desarrollo que ayuda a estudiar a partir
 ## ¿Cómo funciona?
 
 1. Selecciona uno o más archivos de estudio desde el dispositivo. El proyecto contempla archivos **PDF, TXT, DOCX y PPTX** con texto legible.
-2. Elige la cantidad de preguntas y genera el cuestionario.
+2. Elige entre 1 y 15 preguntas y genera el cuestionario.
 3. Responde las preguntas de alternativas y revisa tus resultados.
 4. Vuelve a los cuestionarios guardados en el dispositivo para seguir practicando.
 
@@ -17,9 +17,11 @@ La versión en desarrollo procesa el material en el dispositivo y genera pregunt
 
 La calidad de las preguntas depende del contenido y de cómo esté escrito. Conviene revisar las preguntas y sus respuestas antes de usarlas para estudiar o evaluar. Los PDF escaneados necesitan que se reconozca su texto con OCR antes de importarlos; Quizzunio no realiza ese reconocimiento actualmente. Los archivos protegidos o sin texto legible tampoco se pueden procesar.
 
-## Versión premium: propuesta futura
+## Versión premium
 
-Se planea una versión premium que utilice inteligencia artificial para generar cuestionarios más elaborados y mejorar la calidad de las preguntas. Esta funcionalidad es una idea para el futuro y aún no forma parte de la versión gratuita en desarrollo.
+Las cuentas Premium pueden elegir generación local o generación con IA en QuizzunioServer. Android extrae el texto en el dispositivo y consulta su límite de bytes UTF-8 antes de enviarlo. Las cuentas Free autenticadas pueden guardar en la nube los cuestionarios generados localmente.
+
+Los cuestionarios conservan acentos, escrituras no latinas, símbolos y emojis. El [contrato OpenAPI](specs/openapi.json) especifica las unidades y los límites de cada campo.
 
 ## Tecnologías
 

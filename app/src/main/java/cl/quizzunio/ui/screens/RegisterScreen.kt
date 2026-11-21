@@ -114,7 +114,7 @@ fun RegisterScreen(
             // Nombre de usuario
             OutlinedTextField(
                 value = username,
-                onValueChange = { if (CredentialValidator.ascii(it)) username = it else authModel?.showMessage("Este campo solo admite ASCII.") },
+                onValueChange = { username = it },
                 enabled = auth?.busy != true,
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("Nombre de usuario") },
@@ -166,7 +166,7 @@ fun RegisterScreen(
             // Contraseña
             OutlinedTextField(
                 value = password,
-                onValueChange = { if (CredentialValidator.ascii(it)) password = it else authModel?.showMessage("La contraseña en Android solo admite ASCII.") },
+                onValueChange = { password = it },
                 enabled = auth?.busy != true,
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("Contraseña") },
@@ -193,7 +193,7 @@ fun RegisterScreen(
             // Confirmar contraseña
             OutlinedTextField(
                 value = confirmPassword,
-                onValueChange = { if (CredentialValidator.ascii(it)) confirmPassword = it else authModel?.showMessage("La contraseña en Android solo admite ASCII.") },
+                onValueChange = { confirmPassword = it },
                 enabled = auth?.busy != true,
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("Confirmar contraseña") },
@@ -219,7 +219,7 @@ fun RegisterScreen(
 
             // Texto de ayuda
             Text(
-                text = "Usa 12–128 caracteres ASCII. Los espacios se conservan.",
+                text = "Usa 12–128 puntos de código Unicode. Los espacios se conservan.",
                 style = MaterialTheme.typography.bodySmall.copy(
                     fontSize = 12.sp
                 ),

@@ -1,6 +1,7 @@
 package cl.quizzunio.study
 
 import cl.quizzunio.core.QuizQuestion
+import cl.quizzunio.core.hasValidUnicode
 import cl.quizzunio.network.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -42,18 +43,22 @@ object QuizCodec {
     fun decode(value: JSONObject): RemoteQuiz = decodeResponse {
         val id = value.longValue("quizId"); val owner = value.longValue("userId"); val version = value.longValue("version")
         require(id > 0 && owner > 0 && version > 0)
-        val entries = value.getJSONArray("questions"); require(entries.length() in 1..15)
+        val entries = value.getJSONArray("questions"); require(entries.length() in 1..QuizContentValidator.MAX_QUESTIONS)
         val questions = (0 until entries.length()).map { index ->
             val entry = entries.getJSONObject(index)
             val qid = entry.longValue("questionId"); val quizId = entry.longValue("quizId")
             val correct = entry.longValue("correctAnswerIndex"); val current = entry.longValue("current_answer")
             val options = entry.getJSONArray("options"); require(options.length() == 4)
             require(qid > 0 && quizId == id && correct in 0..3 && current in -1..3)
-            RemoteQuestion(qid, quizId, entry.stringValue("question"), (0..3).map { options.get(it) as? String
-                ?: throw IllegalArgumentException("Alternativa inválida.") }, correct.toInt(), current.toInt())
+            val question = entry.stringValue("question")
+            val alternatives = (0..3).map { options.get(it) as? String
+                ?: throw IllegalArgumentException("Alternativa inválida.") }
+            require(question.hasValidUnicode() && alternatives.all { it.hasValidUnicode() })
+            RemoteQuestion(qid, quizId, question, alternatives, correct.toInt(), current.toInt())
         }
         require(questions.map { it.questionId }.distinct().size == questions.size)
-        val title = value.stringValue("title"); require(title.length <= 255)
+        val title = value.stringValue("title")
+        require(title.hasValidUnicode() && title.codePointCount(0, title.length) <= QuizContentValidator.MAX_TITLE_POINTS)
         val date = value.stringValue("creationDate")
         require(Regex("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}").matches(date))
         RemoteQuiz(id, owner, title, date, version, questions)
@@ -75,18 +80,17 @@ object QuizCodec {
         })
     }
 
-    fun content(title: String, questions: List<EditedQuestion>, ascii: Boolean, version: Long? = null): JSONObject {
-        require(title.isNotBlank() && title.length <= 255 && questions.size in 1..15) { "La nube admite 1–15 preguntas y títulos de hasta 255 caracteres." }
-        require(!ascii || title.all { it.code <= 127 }) { "El contrato de edición solo admite ASCII. El contenido original se conserva." }
+    @Suppress("UNUSED_PARAMETER")
+    fun content(title: String, questions: List<EditedQuestion>, ascii: Boolean, version: Long? = null): JSONObject =
+        content(title, questions, version)
+
+    internal fun content(title: String, questions: List<EditedQuestion>, version: Long? = null): JSONObject {
+        QuizContentValidator.title(title)
+        require(questions.size in 1..QuizContentValidator.MAX_QUESTIONS) { "La nube admite entre 1 y 15 preguntas por cuestionario." }
         val ids = questions.mapNotNull { it.questionId }; require(ids.all { it > 0 } && ids.distinct().size == ids.size)
         val array = JSONArray()
         questions.forEach { question ->
-            require(question.options.size == 4 && question.correctAnswerIndex in 0..3)
-            val texts = listOf(question.question) + question.options
-            require(texts.all { it.isNotBlank() && Charsets.UTF_8.newEncoder().canEncode(it) && it.toByteArray(Charsets.UTF_8).size <= 60000 }) {
-                "Cada pregunta y alternativa debe tener texto válido de hasta 60000 bytes UTF-8."
-            }
-            require(!ascii || texts.all { text -> text.all { it.code <= 127 } }) { "La edición remota solo admite ASCII. No se translitera ni se elimina contenido." }
+            QuizContentValidator.question(question.question, question.options, question.correctAnswerIndex)
             array.put(JSONObject().put("question", question.question).put("options", JSONArray(question.options))
                 .put("correctAnswerIndex", question.correctAnswerIndex).apply { question.questionId?.let { put("questionId", it) } })
         }

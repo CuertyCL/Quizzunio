@@ -27,7 +27,7 @@ fun QuizEditorScreen(localId: String, onBack: () -> Unit) {
     fun update(index: Int, value: EditedQuestion) { questions = questions.toMutableList().apply { set(index, value) } }
     Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Editar cuestionario · Versión ${remote.version}", style = MaterialTheme.typography.titleLarge)
-        Text("El contrato de edición exige ASCII. El texto Unicode recibido se conserva; no se quitarán acentos automáticamente. Las respuestas existentes se mantienen por ID de pregunta.")
+        Text("Completa el título, los enunciados y las alternativas. Las respuestas existentes se mantienen por ID de pregunta.")
         if (record.sync == QuizSyncState.Conflict) Text("Conflicto: tu borrador permanece aquí. Consulta la versión del servidor antes de decidir.", color = MaterialTheme.colorScheme.error)
         OutlinedTextField(title, { title = it }, label = { Text("Título") }, enabled = !study.isBusy, modifier = Modifier.fillMaxWidth())
         questions.forEachIndexed { index, question ->

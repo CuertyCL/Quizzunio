@@ -112,8 +112,9 @@ fun LoginScreen(
             // Campo de Nombre de Usuario
             OutlinedTextField(
                 value = username,
-                onValueChange = { if (CredentialValidator.ascii(it)) username = it else authModel?.showMessage("Este campo solo admite ASCII.") },
+                onValueChange = { username = it },
                 enabled = auth?.busy != true,
+                isError = '@' in username && !CredentialValidator.ascii(username),
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("Usuario o correo electrónico") },
                 leadingIcon = {
@@ -138,7 +139,7 @@ fun LoginScreen(
             // Campo de Contraseña
             OutlinedTextField(
                 value = password,
-                onValueChange = { if (CredentialValidator.ascii(it)) password = it else authModel?.showMessage("La entrada de contraseña de Android solo admite ASCII.") },
+                onValueChange = { password = it },
                 enabled = auth?.busy != true,
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("Contraseña") },

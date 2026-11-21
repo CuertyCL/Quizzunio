@@ -47,7 +47,10 @@ class AccountPersistenceTest {
         assertThrows(IllegalArgumentException::class.java) { QuizCodec.answers(quiz, listOf(0)) }
         val content = listOf(EditedQuestion(null, "¿Célula?", listOf("Uno", "Dos", "Tres", "Cuatro"), 0))
         assertEquals("¿Célula?", QuizCodec.content("Biología", content, false).getJSONArray("questions").getJSONObject(0).getString("question"))
-        assertThrows(IllegalArgumentException::class.java) { QuizCodec.content("Biología", content, true, 8) }
+        val edit = QuizCodec.content("Biología", content, true, 8)
+        assertEquals(8L, edit.getLong("version"))
+        assertEquals("Biología", edit.getString("title"))
+        assertEquals("¿Célula?", edit.getJSONArray("questions").getJSONObject(0).getString("question"))
     }
 
     @Test fun keystoreEncryptsTokensAndBindsCiphertextToTheServer() {

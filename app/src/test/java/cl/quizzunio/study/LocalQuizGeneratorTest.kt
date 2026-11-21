@@ -35,9 +35,21 @@ class LocalQuizGeneratorTest {
     }
 
     @Test fun neverSilentlyReducesRequestedCount() {
-        assertThrows(IllegalArgumentException::class.java) { LocalQuizGenerator().generate(material, 50) }
-        listOf(0, 51).forEach { count ->
+        val insufficient = assertThrows(IllegalArgumentException::class.java) { LocalQuizGenerator().generate(material, 15) }
+        assertTrue(insufficient.message.orEmpty().contains("Reduce la cantidad solicitada"))
+        listOf(0, 16, 50).forEach { count ->
             assertThrows(IllegalArgumentException::class.java) { LocalQuizGenerator().generate(material, count) }
+        }
+    }
+
+    @Test fun localQuotesRetainUnicodeAndWhitespaceFromTheSource() {
+        val suffix = " \t e\u0301 Ñ 漢字 ∑ 😀 𐐀"
+        val source = material.lineSequence().joinToString("\r\n") { it.removeSuffix(".") + suffix }
+        val questions = LocalQuizGenerator().generate(source, 3)
+        assertEquals(3, questions.size)
+        questions.forEach {
+            assertTrue(it.question.contains(suffix))
+            QuizContentValidator.question(it.question, it.answers, it.correctAnswer)
         }
     }
 }

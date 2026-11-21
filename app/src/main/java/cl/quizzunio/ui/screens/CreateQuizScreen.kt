@@ -10,6 +10,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import cl.quizzunio.study.LocalStudyQuizViewModel
+import cl.quizzunio.study.QuizContentValidator
 import cl.quizzunio.study.StudyDocumentReader
 import java.util.Locale
 import androidx.compose.foundation.BorderStroke
@@ -92,12 +93,13 @@ fun CreateQuizScreen(
     val session = auth?.session ?: SessionState.Anonymous
     var source by remember((session as? SessionState.Authenticated)?.user) { mutableStateOf(AccessPolicy.defaultSource(session)) }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        studyModel?.importDocuments(uris)
+        studyModel?.importDocuments(uris, forServer = source == GenerationSource.Server)
     }
     BackHandler(enabled = isBusy) { }
     var quizName by remember { mutableStateOf("") }
     var selectedTopic by remember { mutableStateOf("") }
     var questionCount by remember { mutableIntStateOf(10) }
+    val currentQuestionCount = studyState?.questionCount ?: questionCount
 
     val previewAttachedFiles = remember {
         mutableStateListOf(
@@ -146,7 +148,7 @@ fun CreateQuizScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
-            Text(if (session is SessionState.Authenticated) "${session.user.tier.name} · ${if (source == GenerationSource.Local) "Generación local: 1–50 preguntas" else "Generación en servidor: 1–15 preguntas, texto ASCII"}"
+            Text(if (session is SessionState.Authenticated) "${session.user.tier.name} · ${if (source == GenerationSource.Local) "Generación local" else "Generación en servidor"} · 1–15 preguntas"
                 else "Generación local · Sin cuenta, el cuestionario solo permanece en memoria.")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = source == GenerationSource.Local, onClick = { source = GenerationSource.Local }, enabled = !isBusy, label = { Text("Local") })
@@ -234,7 +236,7 @@ fun CreateQuizScreen(
             ) {
                 Button(
                     onClick = { if (studyModel != null) studyModel.changeQuestionCount(-1) else if (questionCount > 1) questionCount-- },
-                    enabled = !isBusy,
+                    enabled = !isBusy && currentQuestionCount > 1,
                     modifier = Modifier
                         .weight(1f)
                         .height(44.dp),
@@ -261,7 +263,7 @@ fun CreateQuizScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "${studyState?.questionCount ?: questionCount}",
+                            text = "$currentQuestionCount",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground
@@ -270,8 +272,8 @@ fun CreateQuizScreen(
                 }
 
                 Button(
-                    onClick = { if (studyModel != null) studyModel.changeQuestionCount(1) else if (questionCount < 50) questionCount++ },
-                    enabled = !isBusy,
+                    onClick = { if (studyModel != null) studyModel.changeQuestionCount(1) else questionCount++ },
+                    enabled = !isBusy && currentQuestionCount < QuizContentValidator.MAX_QUESTIONS,
                     modifier = Modifier
                         .weight(1f)
                         .height(44.dp),

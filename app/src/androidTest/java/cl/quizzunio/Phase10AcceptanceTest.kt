@@ -379,7 +379,7 @@ class Phase10AcceptanceTest {
         val second = runBlocking { AuthApi(auth.client).login(freeName, password) }
         ui.onNodeWithContentDescription("Ajustes").performClick()
         ui.onNode(hasSetTextAction() and hasText("Contraseña actual")).performScrollTo().performTextReplacement(password)
-        ui.onNode(hasSetTextAction() and hasText("Nueva contraseña (12–128 ASCII)")).performScrollTo().performTextReplacement("Phase10-Changed-456!")
+        ui.onNode(hasSetTextAction() and hasText("Nueva contraseña (12–128 puntos de código)")).performScrollTo().performTextReplacement("Phase10-Changed-456!")
         click("Cambiar contraseña y revocar sesiones")
         ui.waitUntil(30_000) { auth.state.value.session is SessionState.Anonymous && !auth.state.value.busy }
         dismissMessages()

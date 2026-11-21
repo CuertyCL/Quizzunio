@@ -3,8 +3,10 @@ package cl.quizzunio.study
 import android.content.Context
 import android.util.AtomicFile
 import cl.quizzunio.core.QuizQuestion
+import cl.quizzunio.core.hasValidUnicode
 import java.io.File
 import java.io.IOException
+import java.io.InputStreamReader
 import java.security.MessageDigest
 import org.json.JSONArray
 import org.json.JSONObject
@@ -20,7 +22,7 @@ class AccountQuizStore(context: Context, server: String, private val userId: Lon
     override fun load(): List<QuizRecord> {
         if (!file.baseFile.exists()) return emptyList()
         try {
-            val text = file.openRead().bufferedReader(Charsets.UTF_8).use { reader ->
+            val text = InputStreamReader(file.openRead(), Charsets.UTF_8.newDecoder()).buffered().use { reader ->
                 val builder = StringBuilder(); val buffer = CharArray(8192)
                 while (true) {
                     val count = reader.read(buffer); if (count < 0) break
@@ -39,8 +41,12 @@ class AccountQuizStore(context: Context, server: String, private val userId: Lon
                     (0 until questions.length()).map {
                         val q = questions.getJSONObject(it); val options = q.getJSONArray("options")
                         require(options.length() == 4 && q.getInt("correct") in 0..3)
-                        QuizQuestion(q.getString("question"), (0..3).map(options::getString), q.getInt("correct"))
+                        val prompt = q.getString("question")
+                        val alternatives = (0..3).map(options::getString)
+                        require(prompt.hasValidUnicode() && alternatives.all { it.hasValidUnicode() })
+                        QuizQuestion(prompt, alternatives, q.getInt("correct"))
                     }, entry.getBoolean("completed"))
+                require(quiz.title.hasValidUnicode() && quiz.topic.hasValidUnicode())
                 val answers = entry.getJSONArray("answers"); require(answers.length() == quiz.questions.size)
                 val values = (0 until answers.length()).map { answers.getInt(it).also { n -> require(n in -1..3) }.takeIf { n -> n >= 0 } }
                 val current = entry.getInt("currentIndex"); require(current in quiz.questions.indices)
@@ -65,8 +71,8 @@ class AccountQuizStore(context: Context, server: String, private val userId: Lon
         }
         val text = JSONObject().put("formatVersion", 1).put("ownerId", userId).put("records", entries)
             .put("generationUncertain", generationUncertain).toString()
-        require(text.length <= MAX_SNAPSHOT_CHARACTERS) { "El almacenamiento de esta cuenta supera el límite local."
-        }
+        require(text.length <= MAX_SNAPSHOT_CHARACTERS) { "El almacenamiento de esta cuenta supera el límite local." }
+        require(text.hasValidUnicode()) { "El almacenamiento contiene una secuencia Unicode inválida." }
         if (!directory.exists() && !directory.mkdirs()) throw IOException("No se pudo preparar el almacenamiento de la cuenta.")
         val stream = file.startWrite()
         try { stream.write(text.toByteArray(Charsets.UTF_8)); file.finishWrite(stream) }

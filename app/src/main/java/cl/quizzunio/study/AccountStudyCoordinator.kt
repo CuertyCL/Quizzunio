@@ -17,6 +17,7 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
     private val mutableState = MutableStateFlow(AccountStudyState())
     val state = mutableState.asStateFlow()
     private val writes = Mutex()
+    private val generation = Mutex()
     private var loaded = false
 
     suspend fun load() {
@@ -38,7 +39,16 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
         persist(listOf(record) + state.value.records.filterNot { it.quiz.id == record.quiz.id || (record.remote != null && it.remote?.quizId == record.remote.quizId) })
     }
 
-    suspend fun addLocal(quiz: StudyQuiz) { replace(QuizRecord(quiz, ownerId, QuizOrigin.Local)) }
+    suspend fun addLocal(quiz: StudyQuiz) {
+        QuizContentValidator.title(quiz.title)
+        require(quiz.questions.size in 1..QuizContentValidator.MAX_QUESTIONS) {
+            "Un cuestionario nuevo debe tener entre 1 y 15 preguntas."
+        }
+        quiz.questions.forEach { question ->
+            QuizContentValidator.question(question.question, question.answers, question.correctAnswer)
+        }
+        replace(QuizRecord(quiz, ownerId, QuizOrigin.Local))
+    }
 
     suspend fun capture(quiz: StudyQuiz, answers: List<Int?>, index: Int) = writes.withLock {
         val existing = record(quiz.id) ?: return@withLock
@@ -80,22 +90,38 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
         finally { mutableState.value = state.value.copy(busy = false) }
     }
 
-    suspend fun generate(title: String, text: String, count: Int): QuizRecord {
+    suspend fun generate(title: String, text: String, count: Int): QuizRecord =
+        generate(title, text, count) {}
+
+    internal suspend fun generate(title: String, text: String, count: Int, onRequest: () -> Unit): QuizRecord = generation.withLock {
         check(!state.value.generationUncertain) { "Consulta primero la nube y concilia la generación sin confirmar antes de volver a generar." }
-        setGenerationUncertain(true)
+        var submitted = false
+        val beforeSubmission: suspend () -> Unit = {
+            if (!submitted) {
+                setGenerationUncertain(true)
+                submitted = true
+                onRequest()
+            }
+        }
         try {
-            val quiz = remote.generate(title, text, count)
+            val quiz = if (remote is RemoteQuizRepository) {
+                remote.generate(title, text, count, beforeSubmission)
+            } else {
+                beforeSubmission()
+                remote.generate(title, text, count)
+            }
             val record = QuizRecord(quiz.toStudyQuiz(), ownerId, QuizOrigin.Server, quiz, sync = QuizSyncState.Synced)
             replace(record)
             setGenerationUncertain(false)
-            return record
+            record
         } catch (error: ApiException) {
-            if (error.status != 0 && error.code != "INVALID_RESPONSE") setGenerationUncertain(false)
+            if (submitted && error.status != 0 && error.code != "INVALID_RESPONSE") setGenerationUncertain(false)
             throw error
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
         } catch (invalid: IllegalArgumentException) {
-            setGenerationUncertain(false); throw invalid
+            if (submitted) setGenerationUncertain(false)
+            throw invalid
         }
     }
 

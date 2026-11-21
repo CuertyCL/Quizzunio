@@ -1,6 +1,8 @@
 package cl.quizzunio.network
 
+import cl.quizzunio.core.hasValidUnicode
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URISyntaxException
@@ -38,6 +40,8 @@ class ApiConfiguration(baseUrl: String, val development: Boolean = false) {
 
 data class HttpResponse(val status: Int, val body: String, val retryAfterSeconds: Long? = null)
 
+internal class ResponseTooLargeException : IOException()
+
 interface HttpTransport {
     suspend fun send(method: String, url: String, headers: Map<String, String>, body: String?): HttpResponse
 }
@@ -46,7 +50,7 @@ interface HttpTransport {
 class UrlConnectionTransport(
     private val connectTimeoutMillis: Int = 10_000,
     private val readTimeoutMillis: Int = 120_000,
-    private val maxResponseBytes: Int = 4 * 1024 * 1024
+    private val maxResponseBytes: Int = 32 * 1024 * 1024
 ) : HttpTransport {
     override suspend fun send(method: String, url: String, headers: Map<String, String>, body: String?): HttpResponse =
         suspendCancellableCoroutine { continuation ->
@@ -67,6 +71,7 @@ class UrlConnectionTransport(
                     connection.setRequestProperty("Cache-Control", "no-store")
                     headers.forEach { (key, value) -> connection.setRequestProperty(key, value) }
                     if (body != null) {
+                        require(body.hasValidUnicode()) { "La solicitud contiene una secuencia Unicode inválida." }
                         val bytes = body.toByteArray(Charsets.UTF_8)
                         connection.doOutput = true
                         connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
@@ -74,6 +79,7 @@ class UrlConnectionTransport(
                         connection.outputStream.use { it.write(bytes) }
                     }
                     val status = connection.responseCode
+                    if (connection.contentLengthLong > maxResponseBytes) throw ResponseTooLargeException()
                     val stream = if (status >= 400) connection.errorStream else connection.inputStream
                     val bytes = stream?.use { input ->
                         val output = ByteArrayOutputStream()
@@ -82,7 +88,7 @@ class UrlConnectionTransport(
                             if (!continuation.isActive) return@Runnable
                             val count = input.read(buffer)
                             if (count < 0) break
-                            require(output.size() + count <= maxResponseBytes) { "La respuesta del servidor es demasiado grande." }
+                            if (output.size() + count > maxResponseBytes) throw ResponseTooLargeException()
                             output.write(buffer, 0, count)
                         }
                         output.toByteArray()

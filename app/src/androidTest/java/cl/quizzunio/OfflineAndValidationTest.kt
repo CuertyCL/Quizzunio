@@ -88,7 +88,7 @@ class OfflineAndValidationTest {
         var navigated = false
         onMain { viewModel.startRemoteGeneration { navigated = true } }
         assertFalse(navigated)
-        assertTrue(viewModel.state.value.message.orEmpty().contains("nombre"))
+        assertTrue(viewModel.state.value.message.orEmpty().contains("título"))
 
         onMain {
             viewModel.updateQuizName("Título á")
@@ -99,10 +99,11 @@ class OfflineAndValidationTest {
 
         onMain {
             viewModel.updateQuizName("Valid Title")
-            viewModel.changeQuestionCount(10) // 20 preguntas > 15 permitidas
+            viewModel.changeQuestionCount(10)
             viewModel.startRemoteGeneration { navigated = true }
         }
         assertFalse(navigated)
+        assertEquals(15, viewModel.state.value.questionCount)
     }
 
     @Test fun pauseAndFinishPersistPendingAnswersLocallyWhenOffline() {

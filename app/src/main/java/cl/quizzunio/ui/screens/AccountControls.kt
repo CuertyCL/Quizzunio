@@ -38,12 +38,12 @@ fun AccountSettingsPanel() {
         TextButton(onClick = { model.checkStatus() }, enabled = !auth.busy) { Text("Comprobar estado del servidor") }
         auth.status?.let { Text(it) }
         if (user != null) {
-            OutlinedTextField(currentPassword, { if (CredentialValidator.ascii(it)) currentPassword = it },
+            OutlinedTextField(currentPassword, { currentPassword = it },
                 label = { Text("Contraseña actual") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, enabled = !auth.busy)
-            OutlinedTextField(replacement, { if (CredentialValidator.ascii(it)) replacement = it },
-                label = { Text("Nueva contraseña (12–128 ASCII)") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, enabled = !auth.busy)
+            OutlinedTextField(replacement, { replacement = it },
+                label = { Text("Nueva contraseña (12–128 puntos de código)") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, enabled = !auth.busy)
             TextButton(onClick = { model.changePassword(currentPassword, replacement); currentPassword = ""; replacement = "" }, enabled = !auth.busy) { Text("Cambiar contraseña y revocar sesiones") }
-            TextButton(onClick = { deleting = true }, enabled = !auth.busy && currentPassword.isNotEmpty()) { Text("Eliminar cuenta y sus cuestionarios") }
+            TextButton(onClick = { deleting = true }, enabled = !auth.busy) { Text("Eliminar cuenta y sus cuestionarios") }
             TextButton(onClick = { abandoning = true }, enabled = !auth.busy) { Text("Abandonar sesión solo en este dispositivo") }
         }
     }
@@ -77,12 +77,18 @@ fun AccountQuizActions(record: QuizRecord) {
         }}")
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             if (record.remote == null) {
-                TextButton(onClick = { model.uploadQuiz(record.quiz.id) }, enabled = !state.isBusy) { Text("Guardar en nube") }
+                TextButton(
+                    onClick = { model.uploadQuiz(record.quiz.id) },
+                    enabled = !state.isBusy && record.quiz.questions.size <= QuizContentValidator.MAX_QUESTIONS
+                ) { Text("Guardar en nube") }
             } else {
                 TextButton(onClick = { edit(record.quiz.id) }, enabled = !state.isBusy) { Text("Editar") }
                 TextButton(onClick = { model.synchronizeQuiz(record.quiz.id) }, enabled = !state.isBusy) { Text("Sincronizar") }
             }
             TextButton(onClick = { delete = true }, enabled = !state.isBusy) { Text("Eliminar") }
+        }
+        if (record.remote == null && record.quiz.questions.size > QuizContentValidator.MAX_QUESTIONS) {
+            Text("La nube admite hasta 15 preguntas. Este cuestionario se conserva en el dispositivo.")
         }
         if (record.remote != null) {
             TextButton(onClick = { model.inspectServerVersion(record.quiz.id) }, enabled = !state.isBusy) { Text("Consultar versión del servidor") }

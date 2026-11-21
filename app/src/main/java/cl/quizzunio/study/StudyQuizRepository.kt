@@ -3,8 +3,10 @@ package cl.quizzunio.study
 import android.content.Context
 import android.util.AtomicFile
 import cl.quizzunio.core.QuizQuestion
+import cl.quizzunio.core.hasValidUnicode
 import java.io.File
 import java.io.IOException
+import java.io.InputStreamReader
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -49,7 +51,7 @@ class StudyQuizRepository(context: Context) {
         val quizzes = ids.mapNotNull { id ->
             try {
                 val atomicFile = AtomicFile(File(directory, "$id.json"))
-                val text = atomicFile.openRead().bufferedReader(Charsets.UTF_8).use { reader ->
+                val text = InputStreamReader(atomicFile.openRead(), Charsets.UTF_8.newDecoder()).buffered().use { reader ->
                     val builder = StringBuilder()
                     val buffer = CharArray(4096)
                     while (true) {
@@ -130,18 +132,24 @@ class StudyQuizRepository(context: Context) {
             topic = json.optString("topic"),
             questions = questions,
             completed = json.optBoolean("completed", false)
-        ).also(::validate)
+        ).also(::validateStructure)
     }
 
     private fun validate(quiz: StudyQuiz) {
-        require(quiz.title.isNotBlank() && quiz.title.length <= 120)
-        require(quiz.topic.length <= 200)
+        validateStructure(quiz)
+        QuizContentValidator.title(quiz.title)
+        require(quiz.topic.codePointCount(0, quiz.topic.length) <= 200)
+        quiz.questions.forEach { question ->
+            QuizContentValidator.question(question.question, question.answers, question.correctAnswer)
+        }
+    }
+
+    private fun validateStructure(quiz: StudyQuiz) {
+        require(quiz.title.hasValidUnicode() && quiz.topic.hasValidUnicode())
         require(quiz.questions.size in 1..50)
         quiz.questions.forEach { question ->
-            require(question.question.isNotBlank())
             require(question.answers.size == 4 && question.correctAnswer in question.answers.indices)
-            require(question.answers.all { it.isNotBlank() })
-            require(question.answers.map { it.trim().lowercase(java.util.Locale.ROOT) }.distinct().size == 4)
+            require(question.question.hasValidUnicode() && question.answers.all { it.hasValidUnicode() })
         }
     }
 

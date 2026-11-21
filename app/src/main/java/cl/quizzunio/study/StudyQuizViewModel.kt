@@ -10,6 +10,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import cl.quizzunio.core.hasValidUnicode
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -130,27 +131,30 @@ class StudyQuizViewModel(
     }
 
     fun updateQuizName(value: String) {
-        if (!mutableState.value.isBusy) mutableState.update { it.copy(quizName = value.take(120)) }
+        if (!mutableState.value.isBusy) mutableState.update { it.copy(quizName = value) }
     }
 
     fun updateTopic(value: String) {
-        if (!mutableState.value.isBusy) mutableState.update { it.copy(topic = value.take(200)) }
+        if (!mutableState.value.isBusy) mutableState.update { it.copy(topic = value) }
     }
 
     fun changeQuestionCount(delta: Int) {
         if (!mutableState.value.isBusy) mutableState.update {
-            it.copy(questionCount = (it.questionCount + delta).coerceIn(1, 50))
+            it.copy(questionCount = (it.questionCount + delta.toLong()).coerceIn(1, QuizContentValidator.MAX_QUESTIONS.toLong()).toInt())
         }
     }
 
-    fun importDocuments(uris: List<Uri>) {
+    fun importDocuments(uris: List<Uri>) = importDocuments(uris, forServer = false)
+
+    internal fun importDocuments(uris: List<Uri>, forServer: Boolean) {
         val initial = mutableState.value
         if (initial.isBusy || uris.isEmpty()) return
         mutableState.update { it.copy(isBusy = true, message = null) }
         scope.launch {
             val documents = initial.documents.toMutableList()
             val messages = mutableListOf<String>()
-            var characterCount = documents.sumOf { it.text.length }
+            var characterCount = documents.sumOf { it.text.codePointCount(0, it.text.length) }
+            val maxPoints = if (forServer) StudyDocumentReader.MAX_REMOTE_EXTRACTION_POINTS else MAX_CHARACTERS
             try {
                 withContext(Dispatchers.IO) {
                     for (uri in uris.distinct()) {
@@ -161,13 +165,14 @@ class StudyQuizViewModel(
                             break
                         }
                         try {
-                            val document = documentReader.read(uri)
-                            if (characterCount + document.text.length > MAX_CHARACTERS) {
-                                messages += "${document.name}: el material combinado supera los $MAX_CHARACTERS caracteres."
+                            val document = documentReader.read(uri, forServer)
+                            val points = document.text.codePointCount(0, document.text.length)
+                            if (characterCount + points > maxPoints) {
+                                messages += "${document.name}: el material combinado supera la capacidad de extracción de la aplicación."
                                 continue
                             }
                             documents += document
-                            characterCount += document.text.length
+                            characterCount += points
                         } catch (exception: CancellationException) {
                             throw exception
                         } catch (exception: Exception) {
@@ -198,8 +203,7 @@ class StudyQuizViewModel(
         val initial = mutableState.value
         initial.activeQuiz?.let { attempts[it.id] = initial.answers.toList() to initial.currentQuestionIndex }
         if (initial.isBusy) return
-        if (initial.quizName.isBlank()) {
-            showMessage("Escribe el nombre del cuestionario.")
+        if (!validateDraftTitle(initial.quizName)) {
             return
         }
         if (initial.documents.isEmpty()) {
@@ -209,13 +213,19 @@ class StudyQuizViewModel(
         mutableState.update { it.copy(isBusy = true, message = null) }
         scope.launch {
             val quiz = try {
+                require(initial.topic.hasValidUnicode() && initial.topic.codePointCount(0, initial.topic.length) <= 200) {
+                    "El tema admite hasta 200 puntos de código Unicode válidos."
+                }
+                require(initial.documents.sumOf { it.text.codePointCount(0, it.text.length) } <= MAX_CHARACTERS) {
+                    "La generación local admite hasta $MAX_CHARACTERS puntos de código de material."
+                }
                 val generated = withContext(Dispatchers.Default) {
                     generator.generate(initial.documents.joinToString("\n\n") { it.text }, initial.questionCount)
                 }
                 val created = StudyQuiz(
                     id = UUID.randomUUID().toString(),
-                    title = initial.quizName.trim(),
-                    topic = initial.topic.trim(),
+                    title = initial.quizName,
+                    topic = initial.topic,
                     questions = generated
                 )
                 if (repository.canPersist) withContext(Dispatchers.IO) { repository.save(created) }
@@ -436,26 +446,13 @@ class StudyQuizViewModel(
             showMessage("Consulta primero la nube y concilia la generación sin confirmar antes de volver a generar.")
             return
         }
-        val title = initial.quizName.trim()
-        if (title.isBlank() || title.length > 255) {
-            showMessage("Escribe un nombre válido de hasta 255 caracteres.")
-            return
-        }
+        if (!validateDraftTitle(initial.quizName)) return
         if (initial.documents.isEmpty()) {
             showMessage("Adjunta material antes de generar.")
             return
         }
-        if (initial.questionCount !in 1..15) {
+        if (initial.questionCount !in 1..QuizContentValidator.MAX_QUESTIONS) {
             showMessage("La generación remota admite entre 1 y 15 preguntas.")
-            return
-        }
-        val text = initial.documents.joinToString("\n\n") { it.text }
-        if (text.isBlank()) {
-            showMessage("Adjunta material con texto válido antes de generar.")
-            return
-        }
-        if (!(title + text).all { it.code <= 127 }) {
-            showMessage("El generador remoto solo acepta ASCII. Usa generación local para este material; no se eliminarán acentos.")
             return
         }
         onStarted()
@@ -468,13 +465,17 @@ class StudyQuizViewModel(
         mutableGenerationStage.value = GenerationStage.Preparing
         try {
             require(initial.documents.isNotEmpty()) { "Adjunta material antes de generar." }
-            mutableGenerationStage.value = GenerationStage.Requesting
-            val record = it.generate(initial.quizName.trim(), initial.documents.joinToString("\n\n") { document -> document.text }, initial.questionCount)
+            val text = withContext(Dispatchers.Default) { initial.documents.joinToString("\n\n") { document -> document.text } }
+            val record = it.generate(initial.quizName, text, initial.questionCount) {
+                mutableGenerationStage.value = GenerationStage.Requesting
+            }
             mutableGenerationStage.value = GenerationStage.Received
             mutableState.update { value -> value.copy(activeQuiz = record.quiz, answers = record.answers, currentQuestionIndex = 0,
                 quizName = "", topic = "", documents = emptyList()) }
             mutableGenerationStage.value = GenerationStage.Validated
             onComplete()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) { mutableGenerationStage.value = GenerationStage.Failed; throw error }
     }
     fun editQuiz(id: String, title: String, questions: List<EditedQuestion>, onComplete: () -> Unit) = runAccountOperation {
@@ -506,6 +507,14 @@ class StudyQuizViewModel(
         mutableState.update { it.copy(message = message) }
     }
 
+    private fun validateDraftTitle(title: String): Boolean = try {
+        QuizContentValidator.title(title)
+        true
+    } catch (error: IllegalArgumentException) {
+        showMessage(error.message ?: "Escribe un título válido.")
+        false
+    }
+
     override fun onCleared() {
         scope.cancel()
         super.onCleared()
@@ -513,7 +522,7 @@ class StudyQuizViewModel(
 
     private companion object {
         const val MAX_DOCUMENTS = 8
-        const val MAX_CHARACTERS = 500_000
+        const val MAX_CHARACTERS = StudyDocumentReader.MAX_LOCAL_EXTRACTION_POINTS
     }
 }
 

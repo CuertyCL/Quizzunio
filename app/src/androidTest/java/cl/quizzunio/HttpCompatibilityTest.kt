@@ -10,11 +10,14 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import cl.quizzunio.auth.AuthViewModel
 import cl.quizzunio.auth.SessionState
+import cl.quizzunio.settings.AppSettings
 import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.util.UUID
 import java.util.concurrent.Executors
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -150,6 +153,27 @@ class HttpCompatibilityTest {
         clickText("Aplicar servidor")
         ui.waitUntil(15_000) { auth.state.value.server == "https://10.0.2.2:8443" && !auth.state.value.busy }
         assertFalse(auth.client.configuration.isCleartext)
+    }
+
+    @Test fun settingsCanSwitchAndPersistBothThemes() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val settings = AppSettings.getInstance(context)
+        val initial = runBlocking { settings.isDarkMode.first() }
+        lateinit var auth: AuthViewModel
+        ui.runOnIdle { auth = ViewModelProvider(ui.activity)[AuthViewModel::class.java] }
+        ui.waitUntil(30_000) { auth.state.value.session is SessionState.Anonymous && !auth.state.value.busy }
+        dismissDialogs()
+        ui.onNodeWithContentDescription("Ajustes").performClick()
+        try {
+            for (dark in listOf(!initial, initial)) {
+                val label = if (dark) "Oscuro" else "Claro"
+                clickText("Tema de la aplicación")
+                ui.waitUntil(10_000) { ui.onAllNodesWithText(label).fetchSemanticsNodes().isNotEmpty() }
+                assertEquals(dark, runBlocking { settings.isDarkMode.first() })
+            }
+        } finally {
+            runBlocking { settings.setDarkMode(initial) }
+        }
     }
 
     private fun clickText(text: String) {

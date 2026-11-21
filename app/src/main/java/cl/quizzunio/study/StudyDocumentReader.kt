@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Xml
+import cl.quizzunio.core.hasNonBlankContent
+import cl.quizzunio.core.hasValidUnicode
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException
@@ -34,9 +36,11 @@ class StudyDocumentReader(context: Context) {
     private val appContext = context.applicationContext
     private val resolver = appContext.contentResolver
 
-    fun read(uri: Uri): StudyDocument {
+    fun read(uri: Uri): StudyDocument = read(uri, forServer = false)
+
+    internal fun read(uri: Uri, forServer: Boolean): StudyDocument {
         return try {
-            readDocument(uri)
+            readDocument(uri, if (forServer) MAX_REMOTE_EXTRACTION_POINTS else MAX_LOCAL_EXTRACTION_POINTS)
         } catch (error: SecurityException) {
             throw IllegalArgumentException("No se pudo acceder al archivo. Vuelve a seleccionarlo en el explorador.", error)
         } catch (error: XmlPullParserException) {
@@ -46,7 +50,7 @@ class StudyDocumentReader(context: Context) {
         }
     }
 
-    private fun readDocument(uri: Uri): StudyDocument {
+    private fun readDocument(uri: Uri, maxPoints: Int): StudyDocument {
         require(uri.scheme == "content") { "Selecciona el archivo desde el explorador de documentos." }
         var name = ""
         var declaredSize = -1L
@@ -75,23 +79,20 @@ class StudyDocumentReader(context: Context) {
         val bytes = resolver.openInputStream(uri)?.use { readLimited(it, MAX_FILE_BYTES) }
             ?: throw IllegalArgumentException("No se pudo abrir el archivo. Vuelve a seleccionarlo.")
         require(bytes.isNotEmpty()) { "El archivo está vacío." }
-        val rawText = when (type) {
-            "txt" -> readText(bytes)
-            "pdf" -> readPdf(bytes)
-            else -> readOffice(bytes, type)
+        val text = when (type) {
+            "txt" -> readText(bytes, maxPoints)
+            "pdf" -> readPdf(bytes, maxPoints)
+            else -> readOffice(bytes, type, maxPoints)
         }
-        val text = rawText.replace('\u00a0', ' ').replace("\r\n", "\n")
-            .replace(Regex("[\\p{Cc}&&[^\\n\\t]]"), "")
-            .replace(Regex("[ \\t]+"), " ").replace(Regex("\\n{3,}"), "\n\n").trim()
-        require(text.any { it.isLetter() }) {
+        require(text.hasNonBlankContent() && text.hasValidUnicode()) {
             if (type == "pdf") "El PDF no contiene texto legible. Si es un escaneo, conviértelo con OCR antes de importarlo."
             else "El archivo no contiene texto de estudio legible."
         }
-        require(text.length <= MAX_TEXT_CHARS) { "El documento contiene demasiado texto. Divide el material en archivos más pequeños." }
+        require(text.codePointCount(0, text.length) <= maxPoints) { "El documento contiene demasiado texto. Divide el material en archivos más pequeños." }
         return StudyDocument(uri.toString(), name.ifBlank { "Documento.$type" }, bytes.size.toLong(), type.uppercase(Locale.ROOT), text)
     }
 
-    private fun readText(bytes: ByteArray): String {
+    private fun readText(bytes: ByteArray, maxPoints: Int): String {
         val charset: Charset
         val offset: Int
         when {
@@ -112,16 +113,21 @@ class StudyDocumentReader(context: Context) {
                 .decode(ByteBuffer.wrap(bytes, offset, bytes.size - offset)).toString()
         } catch (error: CharacterCodingException) {
             require(offset == 0) { "La codificación del TXT no es válida. Guárdalo como UTF-8." }
-            String(bytes, Charset.forName("windows-1252"))
+            try {
+                Charset.forName("windows-1252").newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString()
+            } catch (invalid: CharacterCodingException) {
+                throw IllegalArgumentException("La codificación del TXT no es válida. Guárdalo como UTF-8.", invalid)
+            }
         }
         require(text.none { it == '\u0000' } && text.count { it.isISOControl() && it !in "\n\r\t" } < 5) {
             "El TXT contiene datos binarios. Guarda el documento como texto UTF-8."
         }
-        require(text.length <= MAX_TEXT_CHARS) { "El TXT contiene demasiado texto. Divide el material." }
+        require(text.length <= maxPoints * 2) { "El TXT contiene demasiado texto. Divide el material." }
         return text
     }
 
-    private fun readPdf(bytes: ByteArray): String {
+    private fun readPdf(bytes: ByteArray, maxPoints: Int): String {
         require(bytes.take(1024).toByteArray().toString(Charsets.ISO_8859_1).contains("%PDF-")) {
             "El archivo no es un PDF válido."
         }
@@ -133,7 +139,7 @@ class StudyDocumentReader(context: Context) {
                 val text = StringBuilder()
                 val stripper = PDFTextStripper().apply {
                     sortByPosition = true
-                    lineSeparator = " "
+                    lineSeparator = "\n"
                     paragraphEnd = "\n"
                     pageEnd = "\n"
                 }
@@ -141,7 +147,7 @@ class StudyDocumentReader(context: Context) {
                     stripper.startPage = page
                     stripper.endPage = page
                     text.append(stripper.getText(document)).append('\n')
-                    require(text.length <= MAX_TEXT_CHARS) { "El PDF contiene demasiado texto. Divide el material." }
+                    require(text.length <= maxPoints * 2) { "El PDF contiene demasiado texto. Divide el material." }
                 }
                 text.toString()
             }
@@ -150,7 +156,7 @@ class StudyDocumentReader(context: Context) {
         }
     }
 
-    private fun readOffice(bytes: ByteArray, type: String): String {
+    private fun readOffice(bytes: ByteArray, type: String, maxPoints: Int): String {
         require(bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4b.toByte()) {
             "El archivo no es un $type válido o está protegido con contraseña."
         }
@@ -220,7 +226,8 @@ class StudyDocumentReader(context: Context) {
                     XmlPullParser.START_TAG -> if (isDocumentNamespace) {
                         when (parser.name) {
                             "t" -> inText = true
-                            "br", "cr", "tab" -> text.append(' ')
+                            "br", "cr" -> text.append('\n')
+                            "tab" -> text.append('\t')
                         }
                     }
                     XmlPullParser.TEXT, XmlPullParser.CDSECT, XmlPullParser.ENTITY_REF -> if (inText) text.append(parser.text.orEmpty())
@@ -230,7 +237,7 @@ class StudyDocumentReader(context: Context) {
                         if (parser.name == "tc") text.append(' ')
                     }
                 }
-                require(text.length <= MAX_TEXT_CHARS) { "El documento contiene demasiado texto. Divide el material." }
+                require(text.length <= maxPoints * 2) { "El documento contiene demasiado texto. Divide el material." }
             }
             text.append('\n')
         }
@@ -282,7 +289,8 @@ class StudyDocumentReader(context: Context) {
         private const val MAX_FILE_BYTES = 20 * 1024 * 1024
         private const val MAX_EXPANDED_BYTES = 50 * 1024 * 1024
         private const val MAX_XML_BYTES = 8 * 1024 * 1024
-        private const val MAX_TEXT_CHARS = 500_000
+        internal const val MAX_LOCAL_EXTRACTION_POINTS = 500_000
+        internal const val MAX_REMOTE_EXTRACTION_POINTS = 10_000_000
         private const val MAX_PDF_PAGES = 200
     }
 }
