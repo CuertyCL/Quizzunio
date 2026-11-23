@@ -149,7 +149,7 @@ fun CreateQuizScreen(
                 .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
             Text(if (session is SessionState.Authenticated) "${session.user.tier.name} · ${if (source == GenerationSource.Local) "Generación local" else "Generación en servidor"} · 1–15 preguntas"
-                else "Generación local · Sin cuenta, el cuestionario solo permanece en memoria.")
+                else "Generación local · Cuestionarios y respuestas guardados en este dispositivo.")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = source == GenerationSource.Local, onClick = { source = GenerationSource.Local }, enabled = !isBusy, label = { Text("Local") })
                 FilterChip(selected = source == GenerationSource.Server, onClick = { source = GenerationSource.Server }, enabled = !isBusy && AccessPolicy.canGenerateRemotely(session), label = { Text("Servidor · Premium") })

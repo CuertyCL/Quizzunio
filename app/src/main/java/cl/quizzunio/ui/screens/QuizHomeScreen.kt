@@ -135,12 +135,14 @@ fun QuizHomeScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 20.dp)
         ) {
-            Text(if (user == null) "Modo anónimo Free · Tus cuestionarios solo permanecen en memoria. Inicia sesión desde Ajustes para acceder a tu cuenta."
+            Text(if (user == null) "Modo anónimo Free · Cuestionarios y progreso guardados en este dispositivo, sin sincronización automática."
                 else "${user.username} · ${user.tier.name} · Búsqueda y filtros sobre los cuestionarios cargados.")
             Spacer(modifier = Modifier.height(12.dp))
 
             if (studyState?.isBusy == true || account?.busy == true) CircularProgressIndicator()
+            if (user == null) TextButton(onClick = { studyModel?.retryLocalLoad() }, enabled = studyState?.isBusy != true) { Text("Volver a leer cuestionarios del dispositivo") }
             if (user != null) {
+                AnonymousImportActions()
                 Row {
                     TextButton(onClick = { studyModel?.refreshCloud() }, enabled = studyState?.isBusy != true) { Text("Actualizar nube") }
                     TextButton(onClick = { studyModel?.refreshCloud(true) }, enabled = studyState?.isBusy != true && account?.hasMore == true) { Text("Cargar más") }
@@ -249,6 +251,7 @@ fun QuizHomeScreen(
                         onClick = { onQuizClick(quiz.id) }
                     )
                     account?.records?.firstOrNull { it.quiz.id == quiz.id }?.let { AccountQuizActions(it) }
+                    if (user == null) AnonymousQuizActions(quiz.id, quiz.title)
                 }
             }
         }

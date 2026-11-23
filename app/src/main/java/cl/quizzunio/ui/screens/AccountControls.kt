@@ -10,6 +10,8 @@ import cl.quizzunio.auth.*
 import cl.quizzunio.network.ApiConfiguration
 import cl.quizzunio.study.*
 import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 val LocalQuizEditorNavigation = staticCompositionLocalOf<(String) -> Unit> { {} }
 
@@ -69,6 +71,17 @@ fun AccountQuizActions(record: QuizRecord) {
     var delete by remember { mutableStateOf(false) }
     var replace by remember { mutableStateOf(false) }
     Column(Modifier.testTag("quiz-actions-${record.quiz.id}")) {
+        if (AnonymousImportIdentity.isImported(record.quiz.id)) {
+            Text(when {
+                record.remote == null -> "Copia local guardada · Subida pendiente"
+                record.sync == QuizSyncState.Conflict -> "Importación con conflicto · Requiere intervención"
+                record.sync == QuizSyncState.Pending -> "Cuestionario remoto creado · Respuestas pendientes"
+                else -> "Importación y respuestas sincronizadas · Posición conservada en este dispositivo"
+            })
+            if (record.remote == null || record.sync != QuizSyncState.Synced) {
+                TextButton(onClick = { model.retryAnonymousImport(record.quiz.id) }, enabled = !state.isBusy) { Text("Reintentar importación y respuestas") }
+            }
+        }
         Text(if (record.remote == null) "Local · Solo en este dispositivo" else "Nube · Versión ${record.remote.version} · ${when (record.sync) {
             QuizSyncState.Synced -> "Sincronizado"
             QuizSyncState.Pending -> "Respuestas pendientes"
@@ -78,7 +91,7 @@ fun AccountQuizActions(record: QuizRecord) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             if (record.remote == null) {
                 TextButton(
-                    onClick = { model.uploadQuiz(record.quiz.id) },
+                    onClick = { if (AnonymousImportIdentity.isImported(record.quiz.id)) model.retryAnonymousImport(record.quiz.id) else model.uploadQuiz(record.quiz.id) },
                     enabled = !state.isBusy && record.quiz.questions.size <= QuizContentValidator.MAX_QUESTIONS
                 ) { Text("Guardar en nube") }
             } else {

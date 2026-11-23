@@ -25,6 +25,8 @@ data class StudyQuizLoadResult(
 
 /** Guarda los cuestionarios en el almacenamiento privado de la aplicación. */
 class StudyQuizRepository(context: Context) {
+    private val anonymousFile = File(context.applicationContext.noBackupFilesDir, "anonymous/quizzes.json")
+    fun createAnonymousStore(): AnonymousQuizStore = AnonymousQuizStore(anonymousFile)
     private val directory = File(context.applicationContext.filesDir, "study_quizzes")
     private var accountDirectory: File? = null
 

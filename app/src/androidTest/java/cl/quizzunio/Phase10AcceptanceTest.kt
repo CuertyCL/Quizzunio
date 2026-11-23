@@ -55,6 +55,7 @@ class Phase10AcceptanceTest {
     }
 
     private fun click(text: String) {
+        if (this::study.isInitialized) ui.waitUntil(90_000) { !study.state.value.isBusy }
         val node = ui.onNodeWithText(text)
         if (!node.isDisplayed()) node.performScrollTo()
         node.performClick(); ui.waitForIdle()
@@ -206,7 +207,11 @@ class Phase10AcceptanceTest {
         assertEquals(before.optInt("POST /quizzes/import"), after.optInt("POST /quizzes/import"))
         assertEquals(0, after.optInt("POST /auth/login"))
         assertTrue(StudyQuizRepository(ui.activity).load().quizzes.isEmpty())
-        assertEquals("El flujo anónimo no crea ningún JSON persistente", filesBefore, quizJsonFiles())
+        val saved = AnonymousQuizStore(ui.activity).load().single { it.quiz.id == study.state.value.activeQuiz!!.id }
+        assertEquals(study.state.value.activeQuiz, saved.quiz)
+        assertEquals(study.state.value.answers, saved.answers)
+        assertTrue("El snapshot anónimo es privado y persistente", quizJsonFiles().any { it.endsWith("anonymous/quizzes.json") })
+        assertTrue("Se conservan los archivos previos", quizJsonFiles().containsAll(filesBefore))
         val quizId = study.state.value.activeQuiz!!.id
         ui.activityRule.scenario.recreate()
         ui.waitForIdle()
@@ -214,13 +219,17 @@ class Phase10AcceptanceTest {
         assertEquals(2, study.state.value.answers.filterNotNull().size)
     }
 
-    @Test fun aAnonymousProcessDeathRestoresNoQuiz() {
+    @Test fun aAnonymousProcessDeathRestoresSavedQuiz() {
         assertSame(SessionState.Anonymous, auth.state.value.session)
-        assertTrue(study.state.value.quizzes.isEmpty())
-        assertNull(study.state.value.activeQuiz)
+        val saved = AnonymousQuizStore(ui.activity).load().single { it.quiz.title == "p10-$runId-A" }
+        assertTrue(study.state.value.quizzes.any { it.id == saved.quiz.id })
+        ui.runOnIdle { assertTrue(study.selectQuiz(saved.quiz.id)) }
+        assertEquals(saved.answers, study.state.value.answers)
+        assertEquals(saved.currentIndex, study.state.value.currentQuestionIndex)
+        assertTrue(saved.quiz.completed)
         assertTrue(StudyQuizRepository(ui.activity).load().quizzes.isEmpty())
         ui.onNodeWithText("Nuevo cuestionario").assertExists()
-        ui.onNodeWithText("p10-$runId-A").assertDoesNotExist()
+        ui.onNodeWithText("p10-$runId-A").assertExists()
     }
 
     private fun enterAccess() {
@@ -242,7 +251,8 @@ class Phase10AcceptanceTest {
         ui.onNodeWithContentDescription("Ajustes").performClick()
         click("Cerrar todas las sesiones")
         ui.waitUntil(30_000) { auth.state.value.session is SessionState.Anonymous && !auth.state.value.busy }
-        ui.waitUntil(30_000) { study.accountOwner.value == null && study.state.value.quizzes.isEmpty() }
+        ui.waitUntil(30_000) { study.accountOwner.value == null && !study.state.value.isBusy }
+        assertEquals(AnonymousQuizStore(ui.activity).load().map { it.quiz }, study.state.value.quizzes)
         dismissMessages()
         ui.onNodeWithText("Nuevo cuestionario").assertExists()
     }
@@ -465,6 +475,6 @@ class Phase10AcceptanceTest {
         ui.onNodeWithContentDescription("Ajustes").performClick()
         field(0, "https://10.0.2.2:8443"); click("Aplicar servidor")
         ui.waitUntil(30_000) { auth.state.value.server == "https://10.0.2.2:8443" && !auth.state.value.busy }
-        back(); assertTrue(study.state.value.quizzes.isEmpty())
+        back(); assertEquals(AnonymousQuizStore(ui.activity).load().map { it.quiz }, study.state.value.quizzes)
     }
 }

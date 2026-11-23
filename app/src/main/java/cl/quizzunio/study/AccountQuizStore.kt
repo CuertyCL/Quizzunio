@@ -17,10 +17,11 @@ class AccountQuizStore(context: Context, server: String, private val userId: Lon
     private val directory = File(context.applicationContext.noBackupFilesDir, "accounts/$namespace/$userId")
     private val file = AtomicFile(File(directory, "quizzes.json"))
     private var generationUncertain = false
+    val workspaceKey: String get() = "$namespace/$userId"
     init { require(userId > 0) }
 
     override fun load(): List<QuizRecord> {
-        if (!file.baseFile.exists()) return emptyList()
+        if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) return emptyList()
         try {
             val text = InputStreamReader(file.openRead(), Charsets.UTF_8.newDecoder()).buffered().use { reader ->
                 val builder = StringBuilder(); val buffer = CharArray(8192)

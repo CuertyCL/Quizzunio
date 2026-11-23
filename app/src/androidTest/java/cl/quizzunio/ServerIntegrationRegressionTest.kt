@@ -103,7 +103,8 @@ class ServerIntegrationRegressionTest {
         ui.onNodeWithContentDescription("Ajustes").performClick()
         click("Cerrar todas las sesiones")
         ui.waitUntil(30_000) { auth.state.value.session is SessionState.Anonymous && !auth.state.value.busy }
-        ui.waitUntil(30_000) { study.accountOwner.value == null && study.state.value.quizzes.isEmpty() }
+        ui.waitUntil(30_000) { study.accountOwner.value == null && !study.state.value.isBusy }
+        assertEquals(cl.quizzunio.study.AnonymousQuizStore(ui.activity).load().map { it.quiz }, study.state.value.quizzes)
         dismissMessages()
     }
 
@@ -179,7 +180,7 @@ class ServerIntegrationRegressionTest {
         ui.waitUntil(30_000) { auth.state.value.session is SessionState.Anonymous && !auth.state.value.busy }
         ui.onNodeWithText("Tu sesión anterior expiró o fue revocada. Continúas en modo anónimo.").assertExists()
         dismissMessages()
-        assertTrue(study.state.value.quizzes.isEmpty())
+        assertEquals(cl.quizzunio.study.AnonymousQuizStore(ui.activity).load().map { it.quiz }, study.state.value.quizzes)
     }
 
     @Test fun r2OfflineInteractionPauseFinishAndLaterSync() {

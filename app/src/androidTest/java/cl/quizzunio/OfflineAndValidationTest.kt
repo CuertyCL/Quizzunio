@@ -133,6 +133,7 @@ class OfflineAndValidationTest {
         }
 
         val pauseLatch = CountDownLatch(1)
+        waitUntil { !viewModel.state.value.isBusy }
         onMain { viewModel.pauseQuiz { pauseLatch.countDown() } }
         assertTrue("pauseQuiz debe salir tras guardar localmente aunque falle la sincronización", pauseLatch.await(5, TimeUnit.SECONDS))
         waitUntil { !viewModel.state.value.isBusy }
@@ -145,7 +146,13 @@ class OfflineAndValidationTest {
         onMain {
             assertTrue(viewModel.selectQuiz(initialQuiz.id))
             assertFalse(viewModel.nextQuestion())
+        }
+        waitUntil { !viewModel.state.value.isBusy }
+        onMain {
             viewModel.selectAnswer(1)
+        }
+        waitUntil { !viewModel.state.value.isBusy }
+        onMain {
             assertTrue(viewModel.nextQuestion())
         }
 
@@ -185,8 +192,17 @@ class OfflineAndValidationTest {
         onMain {
             assertTrue(viewModel.selectQuiz(quiz.id))
             viewModel.selectAnswer(0)
+        }
+        waitUntil { !viewModel.state.value.isBusy }
+        onMain {
             assertFalse(viewModel.nextQuestion())
+        }
+        waitUntil { !viewModel.state.value.isBusy }
+        onMain {
             viewModel.selectAnswer(1)
+        }
+        waitUntil { !viewModel.state.value.isBusy }
+        onMain {
             assertTrue(viewModel.nextQuestion())
         }
         waitUntil { failingStore.records.single().answers == listOf(0, 1) }

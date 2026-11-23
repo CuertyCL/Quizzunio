@@ -386,7 +386,7 @@ fun QuizPlayScreen(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
-                    text = if (auth?.session is SessionState.Authenticated) "Guardar progreso y salir" else "Salir y mantener en memoria",
+                    text = if (auth?.session is SessionState.Authenticated) "Guardar progreso y salir" else "Guardar en dispositivo y salir",
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontSize = 14.sp
                     ),

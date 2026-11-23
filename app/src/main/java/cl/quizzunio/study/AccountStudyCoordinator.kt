@@ -19,8 +19,53 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
     private val writes = Mutex()
     private val generation = Mutex()
     private var loaded = false
+    private val imports = Mutex()
+    val workspaceKey: String get() = (store as? AccountQuizStore)?.workspaceKey ?: "account/$ownerId"
+
+    /** Confirma primero la copia local; un reintento continúa la operación original. */
+    suspend fun importAnonymous(source: AnonymousQuizRecord): QuizRecord = imports.withLock {
+        LocalQuizSnapshotCodec.validate(source)
+        LocalQuizSnapshotCodec.validateNew(source.quiz)
+        val id = AnonymousImportIdentity.localId(source.quiz.id)
+        writes.withLock {
+            if (record(id) == null) {
+                val copy = QuizRecord(source.quiz.copy(id = id), ownerId, QuizOrigin.Local,
+                    answers = source.answers.toList(), currentIndex = source.currentIndex,
+                    importKey = java.util.UUID.randomUUID().toString())
+                persist(listOf(copy) + state.value.records)
+            }
+        }
+        continueAnonymousImport(id)
+    }
+
+    suspend fun retryAnonymousImport(id: String): QuizRecord = imports.withLock {
+        require(AnonymousImportIdentity.isImported(id))
+        continueAnonymousImport(id)
+    }
+
+    private suspend fun continueAnonymousImport(id: String): QuizRecord {
+        var current = record(id) ?: error("No se encontró la copia local de la importación.")
+        if (current.remote != null && current.sync == QuizSyncState.Synced) {
+            // Una repetición explícita no debe anunciar éxito sobre un remoto ya eliminado.
+            val latest = latest(id)
+            current = writes.withLock {
+                val saved = record(id) ?: error("La copia local ya no existe.")
+                val conflict = latest.version != saved.remote?.version || (saved.sync == QuizSyncState.Synced &&
+                    latest.questions.map { it.currentAnswer.takeIf { n -> n >= 0 } } != saved.answers)
+                if (conflict) {
+                    val updated = saved.copy(sync = QuizSyncState.Conflict)
+                    persist(state.value.records.map { if (it.quiz.id == id) updated else it })
+                    updated
+                } else saved
+            }
+        }
+        if (current.remote == null) current = upload(id)
+        if (current.sync == QuizSyncState.Pending || current.sync == QuizSyncState.Conflict) current = synchronize(id)
+        return current
+    }
 
     suspend fun load() {
+        loaded = false
         val records = withContext(Dispatchers.IO) { store.load() }
         require(records.all { it.ownerId == ownerId && (it.remote == null || it.remote.userId == ownerId) })
         val uncertain = withContext(Dispatchers.IO) { store.loadGenerationUncertain() }
@@ -76,7 +121,10 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
                             quiz.questions.map { it.currentAnswer.takeIf { n -> n >= 0 } }, sync = QuizSyncState.Synced)
                         old.sync == QuizSyncState.Pending || old.sync == QuizSyncState.Conflict -> old.copy(sync =
                             if (old.remote?.version != quiz.version) QuizSyncState.Conflict else old.sync)
-                        else -> old.copy(quiz = quiz.toStudyQuiz(old.quiz.id), remote = quiz,
+                        else -> old.copy(quiz = quiz.toStudyQuiz(old.quiz.id).let { refreshed ->
+                            if (AnonymousImportIdentity.isImported(old.quiz.id)) refreshed.copy(topic = old.quiz.topic,
+                                completed = old.quiz.completed && refreshed.completed) else refreshed
+                        }, remote = quiz,
                             answers = quiz.questions.map { it.currentAnswer.takeIf { n -> n >= 0 } },
                             currentIndex = old.currentIndex.coerceAtMost(quiz.questions.lastIndex))
                     }
@@ -139,9 +187,12 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
     suspend fun upload(id: String): QuizRecord {
         val old = record(id) ?: error("No se encontró el cuestionario.")
         val quiz = remote.importLocal(old)
-        val updated = old.copy(remote = quiz, sync = if (old.answers.any { it != null }) QuizSyncState.Pending else QuizSyncState.Synced)
-        replace(updated)
-        return updated
+        return writes.withLock {
+            val latest = record(id) ?: error("La copia local ya no existe. Concilia la operación antes de repetirla.")
+            val updated = latest.copy(remote = quiz, sync = if (latest.answers.any { it != null }) QuizSyncState.Pending else QuizSyncState.Synced)
+            persist(listOf(updated) + state.value.records.filterNot { it.quiz.id == id || it.remote?.quizId == quiz.quizId })
+            updated
+        }
     }
 
     suspend fun synchronize(id: String): QuizRecord {
@@ -150,10 +201,20 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
         check(old.sync != QuizSyncState.Conflict) { "Hay un conflicto. Conserva tus respuestas y revisa la versión del servidor antes de sustituirlas." }
         try {
             val confirmed = remote.answers(quiz, old.answers)
-            val updated = old.copy(remote = confirmed, sync = QuizSyncState.Synced)
-            replace(updated); return updated
+            return writes.withLock {
+                val latest = record(id) ?: error("La copia local ya no existe.")
+                val updated = latest.copy(remote = confirmed, sync = when {
+                    latest.sync == QuizSyncState.Conflict -> QuizSyncState.Conflict
+                    latest.answers != old.answers -> QuizSyncState.Pending
+                    else -> QuizSyncState.Synced
+                })
+                persist(state.value.records.map { if (it.quiz.id == id) updated else it })
+                updated
+            }
         } catch (error: ApiException) {
-            if (error.code == "QUIZ_VERSION_CONFLICT") replace(old.copy(sync = QuizSyncState.Conflict))
+            if (error.code == "QUIZ_VERSION_CONFLICT") writes.withLock {
+                record(id)?.let { current -> persist(state.value.records.map { if (it.quiz.id == id) current.copy(sync = QuizSyncState.Conflict) else it }) }
+            }
             throw error
         }
     }
@@ -186,7 +247,13 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
 
     suspend fun delete(id: String) {
         val old = record(id) ?: return
-        old.remote?.let { remote.delete(it) }
+        old.remote?.let {
+            try { remote.delete(it) }
+            catch (error: ApiException) {
+                // La eliminación explícita también puede retirar una copia cuyo remoto ya no existe.
+                if (error.status != 404) throw error
+            }
+        }
         writes.withLock { persist(state.value.records.filterNot { it.quiz.id == id }) }
     }
 }

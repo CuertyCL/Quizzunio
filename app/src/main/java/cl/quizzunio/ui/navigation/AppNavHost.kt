@@ -71,19 +71,21 @@ fun AppNavHost(
     val auth = authModel?.state?.collectAsState()?.value
     val user = (auth?.session as? SessionState.Authenticated)?.user
     val accountOwner by studyModel.accountOwner.collectAsState()
+    val workspace by studyModel.workspace.collectAsState()
+    val expectedWorkspace = if (user != null) AccountQuizStore(context, authModel.session.server, user.userId).workspaceKey else null
     val navigationTarget by studyModel.navigationTarget.collectAsState()
     var previousUserId by remember { mutableStateOf<Long?>(null) }
     var showAnonymousWarning by remember { mutableStateOf(false) }
     LaunchedEffect(user?.userId, auth?.server, auth?.session is SessionState.Anonymous) {
+        if (auth?.session is SessionState.Restoring || auth?.session is SessionState.Unavailable) return@LaunchedEffect
         val coordinator = if (user != null) AccountStudyCoordinator(user.userId,
             RemoteQuizRepository(authModel.client, authModel.session), AccountQuizStore(context, authModel.session.server, user.userId)) else null
-        if (studyModel.accountOwner.value != user?.userId) studyModel.bindAccount(coordinator)
+        if (studyModel.workspace.value != expectedWorkspace) studyModel.bindAccount(coordinator)
         if (previousUserId != null && user == null) navController.navigate(Screen.Home.route) {
             popUpTo(navController.graph.id) { inclusive = true }
         }
         previousUserId = user?.userId
     }
-    if (accountOwner != user?.userId) { CircularProgressIndicator(); return }
     if (auth?.session is SessionState.Restoring || auth?.session is SessionState.Unavailable) {
         Column {
             if (auth.session is SessionState.Restoring) { CircularProgressIndicator(); Text("Restaurando sesión...") }
@@ -96,6 +98,7 @@ fun AppNavHost(
         }
         return
     }
+    if (accountOwner != user?.userId || workspace != expectedWorkspace) { CircularProgressIndicator(); return }
     LaunchedEffect(navigationTarget) {
         when (navigationTarget) {
             StudyNavigationTarget.Play -> if (navController.currentDestination?.route == Screen.CreateQuiz.route) {
@@ -174,7 +177,8 @@ fun AppNavHost(
                 },
                 onQuizClick = { id ->
                     authModel?.interaction()
-                    if (studyModel.selectQuiz(id)) navController.navigate(Screen.QuizPlay.route)
+                    if (studyModel.selectQuiz(id)) navController.navigate(
+                        if (studyModel.state.value.activeQuiz?.completed == true) Screen.QuizResult.route else Screen.QuizPlay.route)
                 }
             )
         }
@@ -275,8 +279,8 @@ fun AppNavHost(
     }
     if (showAnonymousWarning) AlertDialog(
         onDismissRequest = { showAnonymousWarning = false },
-        title = { Text("Cuestionarios temporales") },
-        text = { Text("Puedes volver y seguir trabajando como anónimo. Si inicias sesión, el contenido temporal se descartará y no se trasladará automáticamente a la cuenta.") },
+        title = { Text("Cuestionarios del dispositivo") },
+        text = { Text("Tus cuestionarios y respuestas seguirán guardados en este dispositivo. Al iniciar sesión quedarán separados de la cuenta; puedes importarlos después mediante una acción explícita. Los materiales todavía sin generar no se conservan.") },
         confirmButton = { TextButton(onClick = { showAnonymousWarning = false; navController.navigate(Screen.Welcome.route) }) { Text("Continuar al acceso") } },
         dismissButton = { TextButton(onClick = { showAnonymousWarning = false }) { Text("Seguir como anónimo") } }
     )
