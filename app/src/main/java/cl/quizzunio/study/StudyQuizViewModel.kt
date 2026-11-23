@@ -593,6 +593,33 @@ class StudyQuizViewModel(
         attempts.remove(id)
         if (state.value.activeQuiz?.id == id) mutableState.update { value -> value.copy(activeQuiz = null, answers = emptyList(), currentQuestionIndex = 0) }
     }
+
+    internal fun renameQuiz(id: String, title: String, expectedWorkspace: String?, onComplete: () -> Unit,
+        onError: (String) -> Unit) {
+        if (state.value.isBusy || workspace.value != expectedWorkspace) return
+        val version = bindingVersion
+        val coordinator = account
+        mutableState.update { it.copy(isBusy = true) }
+        launchWorkspace {
+            if (version != bindingVersion) return@launchWorkspace
+            try {
+                val original = state.value.quizzes.firstOrNull { it.id == id } ?: error("El cuestionario ya no está disponible.")
+                if (original.title != title) {
+                    QuizContentValidator.title(title)
+                    if (coordinator == null) anonymous.rename(id, title) else coordinator.rename(id, title)
+                    if (version != bindingVersion) return@launchWorkspace
+                    val updated = coordinator?.record(id)?.quiz ?: anonymous.record(id)?.quiz ?: error("No se pudo recuperar el título guardado.")
+                    mutableState.update { current -> current.copy(
+                        quizzes = current.quizzes.map { if (it.id == id) updated else it },
+                        activeQuiz = if (current.activeQuiz?.id == id) updated else current.activeQuiz) }
+                }
+                if (version == bindingVersion) onComplete()
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) {
+                if (version == bindingVersion) onError(error.message ?: "No se pudo guardar el nombre. Inténtalo de nuevo.")
+            } finally { if (version == bindingVersion) mutableState.update { it.copy(isBusy = false) } }
+        }
+    }
     fun deleteAnonymousQuiz(id: String) = runAnonymousOperation {
         anonymous.delete(id)
         if (account == null) {

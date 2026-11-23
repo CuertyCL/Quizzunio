@@ -74,4 +74,12 @@ class AnonymousStudyCoordinator(private val store: AnonymousQuizStore) {
     }
 
     suspend fun delete(id: String) = mutate { it.filterNot { record -> record.quiz.id == id } }
+
+    internal suspend fun rename(id: String, title: String) {
+        QuizContentValidator.title(title)
+        mutate { records ->
+            check(records.any { it.quiz.id == id }) { "El cuestionario ya no existe en el espacio anónimo." }
+            records.map { if (it.quiz.id == id) it.copy(quiz = it.quiz.copy(title = title)) else it }
+        }
+    }
 }

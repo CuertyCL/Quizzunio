@@ -120,6 +120,7 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
                     val updated = when {
                         old == null -> QuizRecord(quiz.toStudyQuiz(), ownerId, QuizOrigin.Server, quiz,
                             quiz.questions.map { it.currentAnswer.takeIf { n -> n >= 0 } }, sync = QuizSyncState.Synced)
+                        (old.remote?.version ?: 0) > quiz.version -> old
                         old.sync == QuizSyncState.Pending || old.sync == QuizSyncState.Conflict -> old.copy(sync =
                             if (old.remote?.version != quiz.version) QuizSyncState.Conflict else old.sync)
                         else -> old.copy(quiz = quiz.toStudyQuiz(old.quiz.id).let { refreshed ->
@@ -186,7 +187,14 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
     }
 
     suspend fun upload(id: String): QuizRecord {
-        val old = record(id) ?: error("No se encontró el cuestionario.")
+        val old = writes.withLock {
+            val current = record(id) ?: error("No se encontró el cuestionario.")
+            if (current.remote == null && current.sync != QuizSyncState.Pending) {
+                // La marca y la captura comparten el bloqueo para no enviar un título anterior a un renombrado concurrente.
+                persist(state.value.records.map { if (it.quiz.id == id) it.copy(sync = QuizSyncState.Pending) else it })
+            }
+            record(id) ?: error("No se encontró el cuestionario.")
+        }
         val quiz = remote.importLocal(old)
         return writes.withLock {
             val latest = record(id) ?: error("La copia local ya no existe. Concilia la operación antes de repetirla.")
@@ -250,6 +258,38 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
         } catch (error: ApiException) {
             if (error.code == "QUIZ_VERSION_CONFLICT") replace(old.copy(sync = QuizSyncState.Conflict))
             throw error
+        }
+    }
+
+    /** Cambia solo el título: el intento local nunca se reconstruye desde la respuesta remota. */
+    internal suspend fun rename(id: String, title: String) = answerSync.withLock {
+        writes.withLock renameWrite@ {
+            QuizContentValidator.title(title)
+            val old = record(id) ?: error("No se encontró el cuestionario.")
+            if (old.quiz.title == title) return@renameWrite
+            val quiz = old.remote
+            check(quiz != null || (old.sync == QuizSyncState.LocalOnly && !AnonymousImportIdentity.isImported(id))) {
+                "Hay una subida sin confirmar. Reintenta el guardado en la nube antes de renombrar; se conserva la clave de la operación original."
+            }
+            val confirmed = if (quiz == null) null else {
+                check(old.sync == QuizSyncState.Synced) { "Sincroniza las respuestas pendientes o resuelve el conflicto antes de renombrar en la nube." }
+                val questions = quiz.questions.map { EditedQuestion(it.questionId, it.question, it.options, it.correctAnswerIndex) }
+                try {
+                    remote.edit(quiz, title, questions).also { updated ->
+                        check(updated.quizId == quiz.quizId && updated.userId == ownerId && updated.title == title &&
+                            quiz.version < Long.MAX_VALUE && updated.version == quiz.version + 1 && updated.questions == quiz.questions) {
+                            "El servidor no confirmó un cambio exclusivo del título. Consulta su versión antes de reintentar."
+                        }
+                    }
+                } catch (error: ApiException) {
+                    if (error.code == "QUIZ_VERSION_CONFLICT") {
+                        persist(state.value.records.map { if (it.quiz.id == id) old.copy(sync = QuizSyncState.Conflict) else it })
+                    }
+                    throw error
+                }
+            }
+            val renamed = old.copy(quiz = old.quiz.copy(title = title), remote = confirmed)
+            persist(state.value.records.map { if (it.quiz.id == id) renamed else it })
         }
     }
 

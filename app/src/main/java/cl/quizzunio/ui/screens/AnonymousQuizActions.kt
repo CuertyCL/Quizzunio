@@ -28,10 +28,21 @@ fun AnonymousQuizActions(id: String, title: String) {
 
 @Composable
 internal fun QuizDeleteAction(id: String, title: String, authenticated: Boolean, remote: Boolean) {
+    QuizDeleteAction(id, title, authenticated, remote) { request ->
+        val state = LocalStudyQuizViewModel.current?.state?.collectAsState()?.value
+        DestructiveButton("Eliminar", enabled = state?.isBusy == false, onClick = request)
+    }
+}
+
+@Composable
+internal fun QuizDeleteAction(id: String, title: String, authenticated: Boolean, remote: Boolean,
+    trigger: @Composable (() -> Unit) -> Unit) {
     val model = LocalStudyQuizViewModel.current ?: return
     val state by model.state.collectAsState()
-    var deleting by remember(id) { mutableStateOf(false) }
-    DestructiveButton("Eliminar", enabled = !state.isBusy) { deleting = true }
+    val workspace by model.workspace.collectAsState()
+    var deleting by remember(id, workspace) { mutableStateOf(false) }
+    val origin = workspace
+    trigger { deleting = true }
     if (deleting) AlertDialog(onDismissRequest = { deleting = false }, title = { Text("Eliminar cuestionario") },
         text = {
             Text(when {
@@ -43,7 +54,9 @@ internal fun QuizDeleteAction(id: String, title: String, authenticated: Boolean,
         confirmButton = {
             DestructiveButton("Eliminar", enabled = !state.isBusy) {
                 deleting = false
-                if (authenticated) model.deleteQuiz(id) else model.deleteAnonymousQuiz(id)
+                if (model.workspace.value == origin && (model.accountOwner.value != null) == authenticated) {
+                    if (authenticated) model.deleteQuiz(id) else model.deleteAnonymousQuiz(id)
+                }
             }
         },
         dismissButton = { TextButton(onClick = { deleting = false }) { Text("Cancelar") } })

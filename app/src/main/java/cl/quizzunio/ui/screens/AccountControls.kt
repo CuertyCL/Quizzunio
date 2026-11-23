@@ -120,7 +120,9 @@ internal fun AccountQuizActions(record: QuizRecord, showDelete: Boolean) {
                 TextButton(onClick = { model.retryAnonymousImport(record.quiz.id) }, enabled = !state.isBusy) { Text("Reintentar importación y respuestas") }
             }
         }
-        Text(if (record.remote == null) "Local · Solo en este dispositivo" else "Nube · Versión ${record.remote.version} · ${when (record.sync) {
+        Text(if (record.remote == null) {
+            if (record.sync == QuizSyncState.Pending) "Local · Subida pendiente de confirmación" else "Local · Solo en este dispositivo"
+        } else "Nube · Versión ${record.remote.version} · ${when (record.sync) {
             QuizSyncState.Synced -> "Sincronizado"
             QuizSyncState.Pending -> "Respuestas pendientes"
             QuizSyncState.Conflict -> "Conflicto de versión"

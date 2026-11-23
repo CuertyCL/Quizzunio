@@ -74,9 +74,7 @@ class QuizExperienceTest {
                 ui.onNodeWithTag("quiz-list").performScrollToNode(hasTestTag(tag))
                 return ui.onNodeWithTag(tag)
             }
-            fun deleteAction(quiz: StudyQuiz) = ui.onNode(
-                hasText("Eliminar") and hasClickAction() and hasAnyAncestor(hasTestTag("quiz-card-${quiz.id}"))
-            )
+            fun deleteAction(quiz: StudyQuiz) = ui.onNodeWithTag("quiz-options-${quiz.id}")
             card(first).assertTextContains("Por intentar", substring = true)
             card(first).assertTextContains(first.title)
             ui.onNodeWithText("Anónimo ${first.title}").assertDoesNotExist()
@@ -90,6 +88,8 @@ class QuizExperienceTest {
             ui.onNodeWithText("Eliminar del dispositivo").assertDoesNotExist()
             card(partial)
             deleteAction(partial).performClick()
+            ui.onNodeWithText("Editar").assertIsNotEnabled()
+            ui.onNode(hasText("Eliminar") and hasClickAction()).performClick()
             ui.onNodeWithTag("quiz-play-title").assertDoesNotExist()
             ui.onNodeWithText("Cancelar").performClick()
             assertEquals(fixture, store.load().filter { it.quiz.id in ids })
@@ -134,6 +134,7 @@ class QuizExperienceTest {
 
             card(partial)
             deleteAction(partial).performClick()
+            ui.onNode(hasText("Eliminar") and hasClickAction()).performClick()
             ui.onNode(hasText("Eliminar") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
             ui.waitUntil(15_000) { !study.state.value.isBusy }
             assertNull(store.load().firstOrNull { it.quiz.id == partial.id })

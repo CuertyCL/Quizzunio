@@ -133,4 +133,55 @@ class AnonymousViewModelTest {
         main { reopened.deleteAnonymousQuiz(quiz.id) }; waitFor { !reopened.state.value.isBusy }
         assertTrue(AnonymousQuizStore(context).load().isEmpty()); assertNull(reopened.state.value.activeQuiz)
     }
+
+    @Test fun renamePersistsOnlyTitleAndReportsDiskFailureWithoutLosingInputOrProgress() {
+        val context = context(); val first = AnonymousQuizRecord(quiz("rename-first").copy(completed = true), listOf(2, 1), 1)
+        val other = AnonymousQuizRecord(quiz("rename-other"))
+        AnonymousQuizStore(context).update { listOf(first, other) }
+        val vm = model(context); main { assertTrue(vm.selectQuiz(first.quiz.id)) }
+        val title = "Nuevo título ñ漢😀 e\u0301"
+        var completed = false; var error: String? = null
+        main { vm.renameQuiz(first.quiz.id, title, null, { completed = true }, { error = it }) }
+        waitFor { !vm.state.value.isBusy }
+        assertTrue(completed); assertNull(error)
+        val expected = first.copy(quiz = first.quiz.copy(title = title))
+        assertEquals(listOf(expected, other), AnonymousQuizStore(context).load())
+        val reopened = model(context); main { assertTrue(reopened.selectQuiz(first.quiz.id)) }
+        assertEquals(title, reopened.state.value.activeQuiz!!.title)
+        assertEquals(first.answers, reopened.state.value.answers); assertEquals(1, reopened.state.value.currentQuestionIndex)
+        assertTrue(reopened.state.value.activeQuiz!!.completed)
+        val base = File(context.noBackupFilesDir, "anonymous/quizzes.json")
+        val bytes = base.readBytes()
+        completed = false
+        main { reopened.renameQuiz(first.quiz.id, title, null, { completed = true }, { error = it }) }
+        waitFor { !reopened.state.value.isBusy }
+        assertTrue(completed); assertArrayEquals(bytes, base.readBytes())
+        File(context.noBackupFilesDir, "anonymous/quizzes.json.new").apply { mkdirs(); File(this, "blocked").writeText("fixture") }
+        completed = false
+        main { reopened.renameQuiz(first.quiz.id, "Reintentar 😀", null, { completed = true }, { error = it }) }
+        waitFor { !reopened.state.value.isBusy }
+        assertFalse(completed); assertNotNull(error)
+        assertEquals(title, reopened.state.value.activeQuiz!!.title)
+        assertEquals(listOf(expected, other), AnonymousQuizStore(context).load())
+    }
+
+    @Test fun renameCannotPublishOrModifyTheNextOwnerWithTheSameLocalId() {
+        val context = context(); val source = quiz("shared-rename-id")
+        AnonymousQuizStore(context).update { listOf(AnonymousQuizRecord(source)) }
+        val vm = model(context)
+        val store = AccountQuizStore(context, "https://rename.example", 17)
+        val accountRecord = QuizRecord(source.copy(title = "Título exclusivo de la cuenta"), 17, QuizOrigin.Local)
+        store.save(listOf(accountRecord))
+        var callback = false
+        main {
+            vm.renameQuiz(source.id, "Nuevo anónimo", null, { callback = true }, { fail(it) })
+            vm.bindAccount(AccountStudyCoordinator(17, NoGenerationRemote(), store))
+        }
+        waitFor { !vm.state.value.isBusy && vm.accountOwner.value == 17L }
+        assertEquals(listOf(accountRecord), store.load())
+        assertEquals(listOf(accountRecord.quiz), vm.state.value.quizzes)
+        assertFalse(callback)
+        main { vm.renameQuiz(source.id, "No autorizado desde el espacio anterior", null, { fail("No debe aceptar otro espacio") }, { fail(it) }) }
+        assertEquals(listOf(accountRecord), store.load())
+    }
 }

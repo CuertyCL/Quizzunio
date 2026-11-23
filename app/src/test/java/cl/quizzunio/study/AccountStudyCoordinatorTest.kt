@@ -13,8 +13,13 @@ class AccountStudyCoordinatorTest {
         var records: List<QuizRecord> = emptyList()
         var corrupted = false
         var uncertain = false
+        var failWrite = false
+        var writes = 0
         override fun load(): List<QuizRecord> { if (corrupted) throw IOException("Corrupto"); return records }
-        override fun save(records: List<QuizRecord>) { this.records = records.toList() }
+        override fun save(records: List<QuizRecord>) {
+            if (failWrite) throw IOException("Disco no disponible")
+            writes++; this.records = records.toList()
+        }
         override fun loadGenerationUncertain(): Boolean = uncertain
         override fun saveGenerationUncertain(records: List<QuizRecord>, value: Boolean) { save(records); uncertain = value }
     }
@@ -28,18 +33,30 @@ class AccountStudyCoordinatorTest {
         var generations = 0
         var failGeneration = false
         var lastKey: String? = null
+        var edits = 0
+        var editedQuestions: List<EditedQuestion> = emptyList()
+        var failImport = false
         override suspend fun list(page: Int, pageSize: Int) = RemotePage(page, pageSize, listOf(doc))
         override suspend fun get(id: Long) = doc
         override suspend fun generate(title: String, text: String, count: Int): RemoteQuiz {
             generations++; if (failGeneration) throw ApiException(0, "NETWORK_ERROR", "Sin confirmación"); return doc
         }
-        override suspend fun importLocal(record: QuizRecord): RemoteQuiz { imports++; lastKey = record.importKey; return doc }
+        override suspend fun importLocal(record: QuizRecord): RemoteQuiz {
+            imports++; lastKey = record.importKey
+            if (failImport) throw IOException("Respuesta perdida")
+            return doc
+        }
         override suspend fun answers(quiz: RemoteQuiz, answers: List<Int?>): RemoteQuiz {
             if (conflict) throw ApiException(409, "QUIZ_VERSION_CONFLICT", "Conflicto")
             doc = doc.copy(questions = doc.questions.mapIndexed { index, question -> question.copy(currentAnswer = answers[index] ?: -1) })
             return doc
         }
-        override suspend fun edit(quiz: RemoteQuiz, title: String, questions: List<EditedQuestion>) = doc.copy(title = title, version = doc.version + 1)
+        override suspend fun edit(quiz: RemoteQuiz, title: String, questions: List<EditedQuestion>): RemoteQuiz {
+            edits++; editedQuestions = questions
+            if (conflict) throw ApiException(409, "QUIZ_VERSION_CONFLICT", "Conflicto")
+            doc = doc.copy(title = title, version = doc.version + 1)
+            return doc
+        }
         override suspend fun delete(quiz: RemoteQuiz) { deleted = true }
     }
     private fun local() = StudyQuiz("local-1234567890123456", "Local", "Tema", listOf(
@@ -114,5 +131,75 @@ class AccountStudyCoordinatorTest {
         coordinator.addLocal(local()); coordinator.delete(local().id); assertFalse(remote.deleted); assertTrue(coordinator.state.value.records.isEmpty())
         coordinator.refresh(); coordinator.delete(coordinator.state.value.records.single().quiz.id)
         assertTrue(remote.deleted); assertTrue(coordinator.state.value.records.isEmpty())
+    }
+
+    @Test fun renameLocalHistoricalKeepsIdentityAttemptAndOtherRecordsWithoutHttp() = runBlocking {
+        val remote = Remote(); val original = local().copy(questions = List(50) { local().questions.first() }, completed = true)
+        val first = QuizRecord(original, 17, QuizOrigin.Local, answers = List(50) { if (it == 0) 2 else 1 }, currentIndex = 49)
+        val other = first.copy(quiz = original.copy(id = "other"))
+        val store = Store().apply { records = listOf(first, other) }
+        val coordinator = AccountStudyCoordinator(17, remote, store); coordinator.load()
+        val title = "ñ漢😀".repeat(85)
+        coordinator.rename(original.id, title)
+        assertEquals(first.copy(quiz = original.copy(title = title)), store.records.first())
+        assertEquals(other, store.records.last()); assertEquals(0, remote.edits)
+        val restored = AccountStudyCoordinator(17, remote, store); restored.load()
+        assertEquals(store.records, restored.state.value.records)
+        val writes = store.writes
+        restored.rename(original.id, title)
+        assertEquals(writes, store.writes)
+    }
+
+    @Test fun remoteRenameSendsOriginalQuestionIdsAndPreservesEntireLocalAttempt() = runBlocking {
+        val remote = Remote().apply { doc = doc.copy(questions = doc.questions.mapIndexed { i, q -> q.copy(currentAnswer = if (i == 0) 2 else 1) }) }
+        val store = Store(); val coordinator = AccountStudyCoordinator(17, remote, store); coordinator.load(); coordinator.refresh()
+        val loaded = store.records.single()
+        coordinator.capture(loaded.quiz.copy(completed = true, topic = "Tema 😀"), loaded.answers, 1)
+        val before = store.records.single(); val stale = remote.doc
+        coordinator.rename(before.quiz.id, "Renombrado 😀 漢")
+        val after = store.records.single()
+        assertEquals(before.copy(quiz = before.quiz.copy(title = "Renombrado 😀 漢"), remote = remote.doc), after)
+        assertEquals(stale.questions.map { EditedQuestion(it.questionId, it.question, it.options, it.correctAnswerIndex) }, remote.editedQuestions)
+        assertEquals(stale.version + 1, after.remote!!.version)
+        coordinator.refresh(); assertEquals("Renombrado 😀 漢", store.records.single().quiz.title)
+        remote.doc = stale; coordinator.refresh()
+        assertEquals("Renombrado 😀 漢", store.records.single().quiz.title)
+    }
+
+    @Test fun renameRejectsInvalidTitlesAndDiskErrorsWithoutPublishingFalseSuccess() = runBlocking {
+        val store = Store(); val remote = Remote(); val coordinator = AccountStudyCoordinator(17, remote, store)
+        coordinator.load(); coordinator.addLocal(local()); val before = store.records
+        for (title in listOf("", "   ", "😀".repeat(256), "\uD800")) {
+            try { coordinator.rename(local().id, title); fail("Debe rechazar el título inválido") }
+            catch (expected: IllegalArgumentException) { assertEquals(before, store.records) }
+        }
+        store.failWrite = true
+        try { coordinator.rename(local().id, "Válido"); fail("Debe propagar el fallo de disco") }
+        catch (expected: IOException) { assertEquals(before, coordinator.state.value.records); assertEquals(before, store.records) }
+        assertEquals(0, remote.edits)
+    }
+
+    @Test fun pendingAnswersAndVersionConflictsNeverRenameOrResetProgress() = runBlocking {
+        val remote = Remote(); val store = Store(); val coordinator = AccountStudyCoordinator(17, remote, store)
+        coordinator.load(); coordinator.refresh(); val original = store.records.single()
+        coordinator.capture(original.quiz, listOf(1, null), 1)
+        try { coordinator.rename(original.quiz.id, "Nuevo"); fail("Debe sincronizar primero") }
+        catch (expected: IllegalStateException) { assertEquals(0, remote.edits) }
+        coordinator.synchronize(original.quiz.id)
+        val before = store.records.single(); remote.conflict = true
+        try { coordinator.rename(original.quiz.id, "Nuevo"); fail("Debe detectar conflicto") }
+        catch (expected: ApiException) { assertEquals(409, expected.status) }
+        assertEquals(before.copy(sync = QuizSyncState.Conflict), store.records.single())
+    }
+
+    @Test fun unconfirmedImportKeepsItsOriginalTitleAndIdempotencyKeyUntilReconciled() = runBlocking {
+        val store = Store(); val remote = Remote().apply { failImport = true }
+        val coordinator = AccountStudyCoordinator(17, remote, store); coordinator.load(); coordinator.addLocal(local())
+        try { coordinator.upload(local().id); fail("Debe propagar la respuesta perdida") } catch (expected: IOException) { }
+        val before = store.records.single()
+        assertEquals(QuizSyncState.Pending, before.sync); assertNull(before.remote)
+        try { coordinator.rename(local().id, "No cambiar la operación incierta"); fail("Debe conciliar primero") }
+        catch (expected: IllegalStateException) { assertEquals(before, store.records.single()) }
+        assertEquals(local().id, before.importKey)
     }
 }

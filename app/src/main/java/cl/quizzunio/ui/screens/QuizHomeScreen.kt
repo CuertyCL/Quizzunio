@@ -259,8 +259,8 @@ fun QuizHomeScreen(
                     quiz = quiz,
                     onClick = { onQuizClick(quiz.id) },
                     actions = {
-                        if (user == null) AnonymousQuizActions(quiz.id, quiz.title)
-                        else if (record != null) QuizDeleteAction(quiz.id, quiz.title, authenticated = true, remote = record.remote != null)
+                        if (user == null || record != null) QuizContextActions(quiz.id, quiz.title,
+                            authenticated = user != null, remote = record?.remote != null)
                     }
                 )
                 record?.let { AccountQuizActions(it, showDelete = false) }
