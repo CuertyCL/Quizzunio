@@ -1,5 +1,10 @@
 package cl.quizzunio.ui.screens
 
+import cl.quizzunio.ui.theme.studyColors
+import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+
 import androidx.compose.runtime.collectAsState
 import cl.quizzunio.study.LocalStudyQuizViewModel
 import androidx.compose.foundation.background
@@ -78,6 +83,7 @@ fun QuizHomeScreen(
     val studyState = LocalStudyQuizViewModel.current?.state?.collectAsState()?.value
     val studyModel = LocalStudyQuizViewModel.current
     val account = studyModel?.accountState?.collectAsState()?.value
+    val anonymous = studyModel?.anonymousRecords?.collectAsState()?.value.orEmpty()
     val auth = LocalAuthViewModel.current?.state?.collectAsState()?.value
     val user = (auth?.session as? SessionState.Authenticated)?.user
     var searchQuery by remember { mutableStateOf("") }
@@ -91,8 +97,12 @@ fun QuizHomeScreen(
         QuizItem("4", "Física - Movimiento", 12, "Completado", false)
     )
 
+    val attempts = if (user == null) anonymous.associate { it.quiz.id to it.answers }
+        else account?.records.orEmpty().associate { it.quiz.id to it.answers }
     val sampleQuizzes = (studyState?.quizzes?.map { quiz ->
-        QuizItem(quiz.id, quiz.title, quiz.questions.size, if (quiz.completed) "Completado" else "Listo", false)
+        val answers = attempts[quiz.id]
+        val progress = quizProgress(quiz.completed, answers.orEmpty())
+        QuizItem(quiz.id, quiz.title, quiz.questions.size, progress.label)
     } ?: previewQuizzes).filter { quiz ->
         quiz.title.contains(searchQuery.trim(), ignoreCase = true) &&
             (selectedFilterIndex != 2 || quiz.status == "Completado")
@@ -129,130 +139,131 @@ fun QuizHomeScreen(
             }
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 20.dp)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 20.dp)
+                .testTag("quiz-list"),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(if (user == null) "Modo anónimo Free · Cuestionarios y progreso guardados en este dispositivo, sin sincronización automática."
-                else "${user.username} · ${user.tier.name} · Búsqueda y filtros sobre los cuestionarios cargados.")
-            Spacer(modifier = Modifier.height(12.dp))
+            item {
+                Column {
+                    Text(if (user == null) "Modo anónimo Free · Cuestionarios y progreso guardados en este dispositivo, sin sincronización automática."
+                        else "${user.username} · ${user.tier.name} · Búsqueda y filtros sobre los cuestionarios cargados.")
+                    Spacer(modifier = Modifier.height(12.dp))
 
-            if (studyState?.isBusy == true || account?.busy == true) CircularProgressIndicator()
-            if (user == null) TextButton(onClick = { studyModel?.retryLocalLoad() }, enabled = studyState?.isBusy != true) { Text("Volver a leer cuestionarios del dispositivo") }
-            if (user != null) {
-                AnonymousImportActions()
-                Row {
-                    TextButton(onClick = { studyModel?.refreshCloud() }, enabled = studyState?.isBusy != true) { Text("Actualizar nube") }
-                    TextButton(onClick = { studyModel?.refreshCloud(true) }, enabled = studyState?.isBusy != true && account?.hasMore == true) { Text("Cargar más") }
-                }
-                account?.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                if (account?.generationUncertain == true) {
-                    Text("La generación anterior no tiene confirmación. Actualiza la nube y revisa todos los resultados antes de repetirla.")
-                    TextButton(onClick = { studyModel?.confirmGenerationReconciled() }, enabled = account.page > 0 && account.error == null) { Text("Revisé la nube y concilié la generación") }
-                }
-            }
-            if (sampleQuizzes.isEmpty() && studyState?.isBusy != true) Text("No hay cuestionarios que coincidan con la búsqueda y el filtro.")
-            // Botón Crear Cuestionario
-            Button(
-                onClick = onCreateQuizClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                shape = RoundedCornerShape(24.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = null,
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-                Text(
-                    text = "Nuevo cuestionario",
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontWeight = FontWeight.Bold
-                    )
-                )
-            }
+                    if (studyState?.isBusy == true || account?.busy == true) CircularProgressIndicator()
+                    if (user == null) TextButton(onClick = { studyModel?.retryLocalLoad() }, enabled = studyState?.isBusy != true) { Text("Volver a leer cuestionarios del dispositivo") }
+                    if (user != null) {
+                        AnonymousImportActions()
+                        Row {
+                            TextButton(onClick = { studyModel?.refreshCloud() }, enabled = studyState?.isBusy != true) { Text("Actualizar nube") }
+                            TextButton(onClick = { studyModel?.refreshCloud(true) }, enabled = studyState?.isBusy != true && account?.hasMore == true) { Text("Cargar más") }
+                        }
+                        account?.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                        if (account?.generationUncertain == true) {
+                            Text("La generación anterior no tiene confirmación. Actualiza la nube y revisa todos los resultados antes de repetirla.")
+                            TextButton(onClick = { studyModel?.confirmGenerationReconciled() }, enabled = account.page > 0 && account.error == null) { Text("Revisé la nube y concilié la generación") }
+                        }
+                    }
+                    if (sampleQuizzes.isEmpty() && studyState?.isBusy != true) Text("No hay cuestionarios que coincidan con la búsqueda y el filtro.")
+                    // Botón Crear Cuestionario
+                    Button(
+                        onClick = onCreateQuizClick,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                        Text(
+                            text = "Nuevo cuestionario",
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                    }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-            // Campo de Búsqueda
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Buscar cuestionarios...") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Buscar",
-                        tint = MaterialTheme.colorScheme.secondary
-                    )
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                )
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Chips de Filtro
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                filters.forEachIndexed { index, label ->
-                    FilterChip(
-                        selected = selectedFilterIndex == index,
-                        onClick = { selectedFilterIndex = index },
-                        label = { Text(label) },
-                        shape = RoundedCornerShape(20.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            labelColor = MaterialTheme.colorScheme.onBackground,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    // Campo de Búsqueda
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Buscar cuestionarios...") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Buscar",
+                                tint = MaterialTheme.colorScheme.secondary
+                            )
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
                         )
                     )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Chips de Filtro
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        filters.forEachIndexed { index, label ->
+                            FilterChip(
+                                selected = selectedFilterIndex == index,
+                                onClick = { selectedFilterIndex = index },
+                                label = { Text(label) },
+                                shape = RoundedCornerShape(20.dp),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    labelColor = MaterialTheme.colorScheme.onBackground,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Título de Sección
+                    Text(
+                        text = "Mis cuestionarios",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
                 }
             }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Título de Sección
-            Text(
-                text = "Mis cuestionarios",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                ),
-                color = MaterialTheme.colorScheme.onBackground
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Lista de Cuestionarios
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(sampleQuizzes) { quiz ->
-                    QuizCard(
-                        quiz = quiz,
-                        onClick = { onQuizClick(quiz.id) }
-                    )
-                    account?.records?.firstOrNull { it.quiz.id == quiz.id }?.let { AccountQuizActions(it) }
-                    if (user == null) AnonymousQuizActions(quiz.id, quiz.title)
-                }
+            items(sampleQuizzes, key = { it.id }) { quiz ->
+                val record = account?.records?.firstOrNull { it.quiz.id == quiz.id }
+                QuizCard(
+                    quiz = quiz,
+                    onClick = { onQuizClick(quiz.id) },
+                    actions = {
+                        if (user == null) AnonymousQuizActions(quiz.id, quiz.title)
+                        else if (record != null) QuizDeleteAction(quiz.id, quiz.title, authenticated = true, remote = record.remote != null)
+                    }
+                )
+                record?.let { AccountQuizActions(it, showDelete = false) }
             }
         }
     }
@@ -262,11 +273,19 @@ fun QuizHomeScreen(
 fun QuizCard(
     quiz: QuizItem,
     onClick: () -> Unit
+) = QuizCard(quiz, onClick, actions = {})
+
+@Composable
+private fun QuizCard(
+    quiz: QuizItem,
+    onClick: () -> Unit,
+    actions: @Composable () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
+            .testTag("quiz-card-${quiz.id}")
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
@@ -280,7 +299,7 @@ fun QuizCard(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).padding(end = 8.dp)
             ) {
                 Text(
                     text = quiz.title,
@@ -293,11 +312,12 @@ fun QuizCard(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                val extendedColors = MaterialTheme.extendedColors
-                val statusColor = if (quiz.isDraft) {
-                    extendedColors.warning
-                } else {
-                    extendedColors.success
+                val colors = MaterialTheme.studyColors
+                val statusColor = when (quiz.status) {
+                    QuizProgress.Completed.label -> colors.completed
+                    QuizProgress.InProgress.label -> colors.inProgress
+                    QuizProgress.NotStarted.label -> colors.notStarted
+                    else -> if (quiz.isDraft) colors.inProgress else colors.completed
                 }
 
                 Text(
@@ -313,8 +333,10 @@ fun QuizCard(
             Text(
                 text = "›",
                 fontSize = 24.sp,
-                color = MaterialTheme.colorScheme.secondary
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.padding(horizontal = 8.dp)
             )
+            actions()
         }
     }
 }

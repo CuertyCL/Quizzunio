@@ -23,13 +23,29 @@ import cl.quizzunio.study.LocalStudyQuizViewModel
 
 @Composable
 fun AnonymousQuizActions(id: String, title: String) {
+    QuizDeleteAction(id, title, authenticated = false, remote = false)
+}
+
+@Composable
+internal fun QuizDeleteAction(id: String, title: String, authenticated: Boolean, remote: Boolean) {
     val model = LocalStudyQuizViewModel.current ?: return
     val state by model.state.collectAsState()
     var deleting by remember(id) { mutableStateOf(false) }
-    TextButton(onClick = { deleting = true }, enabled = !state.isBusy) { Text("Eliminar del dispositivo") }
-    if (deleting) AlertDialog(onDismissRequest = { deleting = false }, title = { Text("Eliminar cuestionario local") },
-        text = { Text("¿Eliminar únicamente «$title» y su intento de este dispositivo? Las copias importadas a cuentas se conservan.") },
-        confirmButton = { TextButton(onClick = { deleting = false; model.deleteAnonymousQuiz(id) }) { Text("Confirmar eliminación local") } },
+    DestructiveButton("Eliminar", enabled = !state.isBusy) { deleting = true }
+    if (deleting) AlertDialog(onDismissRequest = { deleting = false }, title = { Text("Eliminar cuestionario") },
+        text = {
+            Text(when {
+                !authenticated -> "¿Eliminar «$title» y su progreso de este dispositivo? Las copias importadas a cuentas se conservan."
+                remote -> "¿Eliminar «$title» de tu cuenta del servidor?"
+                else -> "¿Eliminar «$title» y su progreso local de este dispositivo?"
+            })
+        },
+        confirmButton = {
+            DestructiveButton("Eliminar", enabled = !state.isBusy) {
+                deleting = false
+                if (authenticated) model.deleteQuiz(id) else model.deleteAnonymousQuiz(id)
+            }
+        },
         dismissButton = { TextButton(onClick = { deleting = false }) { Text("Cancelar") } })
 }
 

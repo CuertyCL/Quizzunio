@@ -148,13 +148,22 @@ open class AppSettings(
     /**
      * Flujo que emite si el modo oscuro está activado.
      */
-    val isDarkMode: Flow<Boolean> = getPreference(Keys.KEY_DARK_MODE, false)
+    val themeMode: Flow<ThemeMode> = preferencesFlow.map { preferences ->
+        ThemeMode.fromPreferences(preferences[Keys.KEY_THEME_MODE], preferences[Keys.KEY_DARK_MODE])
+    }
+
+    suspend fun setThemeMode(mode: ThemeMode) = setPreference(Keys.KEY_THEME_MODE, mode.key)
+
+    val isDarkMode: Flow<Boolean> = themeMode.map { it == ThemeMode.Dark }
 
     /**
      * Activa o desactiva el modo oscuro en las preferencias.
      */
     suspend fun setDarkMode(enabled: Boolean) {
-        setPreference(Keys.KEY_DARK_MODE, enabled)
+        dataStore.edit { preferences ->
+            preferences[Keys.KEY_DARK_MODE] = enabled
+            preferences[Keys.KEY_THEME_MODE] = if (enabled) ThemeMode.Dark.key else ThemeMode.Light.key
+        }
     }
 
     /**
@@ -171,6 +180,7 @@ open class AppSettings(
 
     object Keys {
         val KEY_DARK_MODE = booleanPreferencesKey("dark_mode_enabled")
+        val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
         val KEY_LANGUAGE = stringPreferencesKey("app_language")
         val KEY_NOTIFICATIONS = booleanPreferencesKey("notifications_enabled")
         val KEY_SOUND_EFFECTS = booleanPreferencesKey("sound_effects_enabled")

@@ -80,18 +80,18 @@ class ServerIntegrationRegressionTest {
 
     private fun configureServer(url: String) {
         ui.onNodeWithContentDescription("Ajustes").performClick()
+        click("Servidor")
         field(0, url); click("Aplicar servidor")
         if (ui.onAllNodesWithText("Confirmar uso de HTTP").fetchSemanticsNodes().isNotEmpty()) {
             click("Confirmar uso de HTTP")
         }
         ui.waitUntil(30_000) { auth.state.value.server == url && !auth.state.value.busy }
-        back()
+        back(); back()
     }
 
     private fun login(username: String) {
         ui.onNodeWithContentDescription("Ajustes").performClick()
-        click("Iniciar sesión o registrarse")
-        if (ui.onAllNodesWithText("Continuar al acceso").fetchSemanticsNodes().isNotEmpty()) click("Continuar al acceso")
+        click("Cuenta")
         click("Iniciar sesión")
         field(0, username); field(1, password); click("Iniciar sesión")
         ui.waitUntil(30_000) { (auth.state.value.session as? SessionState.Authenticated)?.user?.username == username && !auth.state.value.busy }
@@ -101,7 +101,8 @@ class ServerIntegrationRegressionTest {
     private fun logout() {
         dismissMessages()
         ui.onNodeWithContentDescription("Ajustes").performClick()
-        click("Cerrar todas las sesiones")
+        click("Cuenta")
+        click("Cerrar sesión")
         ui.waitUntil(30_000) { auth.state.value.session is SessionState.Anonymous && !auth.state.value.busy }
         ui.waitUntil(30_000) { study.accountOwner.value == null && !study.state.value.isBusy }
         assertEquals(cl.quizzunio.study.AnonymousQuizStore(ui.activity).load().map { it.quiz }, study.state.value.quizzes)
@@ -216,9 +217,10 @@ class ServerIntegrationRegressionTest {
             // La falla transitoria de /auth/activity sin conexión no debe abrir diálogos de error.
             ui.onAllNodesWithText("Entendido").assertCountEquals(0)
 
-            click("Guardar progreso y salir")
             waitStudy()
-            assertTrue(study.state.value.message.orEmpty().contains("pendiente de sincronizar"))
+            ui.onNodeWithContentDescription("Volver").performClick()
+            waitStudy()
+            ui.onAllNodesWithText("Entendido").assertCountEquals(0)
             dismissMessages()
             ui.onNodeWithText("Nuevo cuestionario").assertExists()
             assertEquals(QuizSyncState.Pending, study.accountState.value.records.single { it.quiz.id == record.quiz.id }.sync)

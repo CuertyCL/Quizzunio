@@ -74,3 +74,11 @@ val QuizzunioSuccessContainerDark = Color(0xFF143A36)
 
 val QuizzunioWarningLight = Color(0xFFAE6E16)
 val QuizzunioWarningDark = Color(0xFFF7B951)
+
+internal val DestructiveBackground = Color(0xFFAB2439)
+internal val DestructiveForeground = Color.White
+internal val StudyGreenLight = Color(0xFF106347)
+internal val StudyAmberLight = Color(0xFF795000)
+internal val StudyBlueLight = Color(0xFF1655A7)
+internal val StudyBlueDark = Color(0xFF87C4FF)
+internal val StudyRedLight = Color(0xFFAB2439)

@@ -12,11 +12,23 @@ import cl.quizzunio.study.*
 import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 val LocalQuizEditorNavigation = staticCompositionLocalOf<(String) -> Unit> { {} }
 
 @Composable
 fun AccountSettingsPanel() {
+    val model = LocalAuthViewModel.current
+    AccountSettingsPanel(onAccessClick = { model?.logout() })
+}
+
+@Composable
+internal fun AccountSettingsPanel(onAccessClick: () -> Unit) {
+    AccountSettingsPanel(onAccessClick, section = null)
+}
+
+@Composable
+internal fun AccountSettingsPanel(onAccessClick: () -> Unit, section: SettingsDestination?) {
     val model = LocalAuthViewModel.current ?: return
     val auth by model.state.collectAsState()
     val user = (auth.session as? SessionState.Authenticated)?.user
@@ -26,9 +38,7 @@ fun AccountSettingsPanel() {
     var replacement by remember { mutableStateOf("") }
     var deleting by remember { mutableStateOf(false) }
     var abandoning by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(if (user == null) "Modo anónimo · Free" else "${user.username} · ${user.tier.name}")
-        if (user != null) Text(user.email)
+    if (section != SettingsDestination.Account) SettingsSection("Configuración de servidor") {
         OutlinedTextField(endpoint, { endpoint = it }, label = { Text("URL del servidor") },
             enabled = !auth.busy && user == null, singleLine = true, modifier = Modifier.fillMaxWidth())
         Text("Se recomienda HTTPS con certificado válido (predeterminado https://10.0.2.2:8443). HTTP sin cifrado requiere confirmación explícita y solo debe usarse en redes controladas (LAN o VPN).")
@@ -39,7 +49,19 @@ fun AccountSettingsPanel() {
         }, enabled = !auth.busy) { Text("Aplicar servidor") }
         TextButton(onClick = { model.checkStatus() }, enabled = !auth.busy) { Text("Comprobar estado del servidor") }
         auth.status?.let { Text(it) }
+    }
+    if (section != SettingsDestination.Server) SettingsSection("Cuenta") {
+        if (user == null) {
+            Text("Nombre de usuario: Anónimo")
+            Button(onClick = onAccessClick, enabled = !auth.busy, shape = RoundedCornerShape(24.dp)) {
+                Text("Iniciar sesión")
+            }
+        }
         if (user != null) {
+            Text("Nombre de usuario: ${user.username}")
+            Text("Correo electrónico: ${user.email}")
+            Text("Suscripción: ${user.tier.name}")
+            DestructiveButton("Cerrar sesión", enabled = !auth.busy, onClick = onAccessClick)
             OutlinedTextField(currentPassword, { currentPassword = it },
                 label = { Text("Contraseña actual") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, enabled = !auth.busy)
             OutlinedTextField(replacement, { replacement = it },
@@ -64,11 +86,27 @@ fun AccountSettingsPanel() {
 }
 
 @Composable
-fun AccountQuizActions(record: QuizRecord) {
+private fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            content()
+        }
+    }
+}
+
+@Composable
+fun AccountQuizActions(record: QuizRecord) = AccountQuizActions(record, showDelete = true)
+
+@Composable
+internal fun AccountQuizActions(record: QuizRecord, showDelete: Boolean) {
     val model = LocalStudyQuizViewModel.current ?: return
     val state by model.state.collectAsState()
     val edit = LocalQuizEditorNavigation.current
-    var delete by remember { mutableStateOf(false) }
     var replace by remember { mutableStateOf(false) }
     Column(Modifier.testTag("quiz-actions-${record.quiz.id}")) {
         if (AnonymousImportIdentity.isImported(record.quiz.id)) {
@@ -98,7 +136,7 @@ fun AccountQuizActions(record: QuizRecord) {
                 TextButton(onClick = { edit(record.quiz.id) }, enabled = !state.isBusy) { Text("Editar") }
                 TextButton(onClick = { model.synchronizeQuiz(record.quiz.id) }, enabled = !state.isBusy) { Text("Sincronizar") }
             }
-            TextButton(onClick = { delete = true }, enabled = !state.isBusy) { Text("Eliminar") }
+            if (showDelete) QuizDeleteAction(record.quiz.id, record.quiz.title, authenticated = true, remote = record.remote != null)
         }
         if (record.remote == null && record.quiz.questions.size > QuizContentValidator.MAX_QUESTIONS) {
             Text("La nube admite hasta 15 preguntas. Este cuestionario se conserva en el dispositivo.")
@@ -108,10 +146,6 @@ fun AccountQuizActions(record: QuizRecord) {
             TextButton(onClick = { replace = true }, enabled = !state.isBusy) { Text("Sustituir por versión del servidor") }
         }
     }
-    if (delete) AlertDialog(onDismissRequest = { delete = false }, title = { Text("Eliminar cuestionario") },
-        text = { Text("¿Eliminar «${record.quiz.title}»${if (record.remote != null) " de tu cuenta del servidor" else " de este dispositivo"}?") },
-        confirmButton = { TextButton(onClick = { delete = false; model.deleteQuiz(record.quiz.id) }) { Text("Eliminar") } },
-        dismissButton = { TextButton(onClick = { delete = false }) { Text("Cancelar") } })
     if (replace) AlertDialog(onDismissRequest = { replace = false }, title = { Text("Sustituir estado local") },
         text = { Text("Se descartarán las respuestas pendientes de este cuestionario y se cargará el contenido y las respuestas actuales del servidor.") },
         confirmButton = { TextButton(onClick = { replace = false; model.acceptServerVersion(record.quiz.id) }) { Text("Cargar y sustituir") } },

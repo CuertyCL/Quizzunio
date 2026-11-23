@@ -32,6 +32,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlinx.coroutines.CompletableDeferred
 
 /** Verifica validaciones previas de generación remota y persistencia sin conexión en StudyQuizViewModel. */
 @RunWith(AndroidJUnit4::class)
@@ -59,17 +60,47 @@ class OfflineAndValidationTest {
             )
         )
         var failSync = true
+        var answerGate: CompletableDeferred<Unit>? = null
+        val answerAttempt = CountDownLatch(1)
 
         override suspend fun list(page: Int, pageSize: Int): RemotePage = RemotePage(page, pageSize, listOf(remoteQuiz))
         override suspend fun get(id: Long): RemoteQuiz = remoteQuiz
         override suspend fun generate(title: String, text: String, count: Int): RemoteQuiz = remoteQuiz
         override suspend fun importLocal(record: QuizRecord): RemoteQuiz = remoteQuiz
         override suspend fun answers(quiz: RemoteQuiz, answers: List<Int?>): RemoteQuiz {
+            answerAttempt.countDown()
+            answerGate?.await()
             if (failSync) throw ApiException(0, "NETWORK_ERROR", "No se recibió confirmación.")
             return quiz
         }
         override suspend fun edit(quiz: RemoteQuiz, title: String, questions: List<EditedQuestion>): RemoteQuiz = remoteQuiz
         override suspend fun delete(quiz: RemoteQuiz) = Unit
+    }
+
+    @Test fun backCommitsAndLeavesWhileServerIsStillWaiting() {
+        val context = isolatedContext()
+        val remote = OfflineRemoteGateway()
+        val gate = CompletableDeferred<Unit>()
+        remote.answerGate = gate
+        val store = AccountQuizStore(context, "https://example.com", 9L)
+        val quiz = remote.remoteQuiz.toStudyQuiz()
+        store.save(listOf(QuizRecord(quiz, 9L, QuizOrigin.Server, remote.remoteQuiz, sync = QuizSyncState.Synced)))
+        val vm = StudyQuizViewModel(StudyQuizRepository(context), StudyDocumentReader(context), LocalQuizGenerator())
+        onMain { vm.bindAccount(AccountStudyCoordinator(9L, remote, store)) }
+        waitUntil { !vm.state.value.isBusy && vm.state.value.quizzes.isNotEmpty() }
+        onMain { assertTrue(vm.selectQuiz(quiz.id)); vm.selectAnswer(0) }
+        waitUntil { !vm.state.value.isBusy }
+        val left = CountDownLatch(1)
+        try {
+            onMain { vm.saveAndLeaveQuiz { left.countDown() } }
+            assertTrue(left.await(5, TimeUnit.SECONDS))
+            assertTrue(remote.answerAttempt.await(5, TimeUnit.SECONDS))
+            assertFalse(gate.isCompleted)
+            assertEquals(listOf(0, null), store.load().single().answers)
+            assertEquals(QuizSyncState.Pending, store.load().single().sync)
+        } finally {
+            gate.complete(Unit)
+        }
     }
 
     private fun onMain(block: () -> Unit) {

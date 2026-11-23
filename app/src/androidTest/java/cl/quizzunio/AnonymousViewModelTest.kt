@@ -94,6 +94,11 @@ class AnonymousViewModelTest {
         main { vm.pauseQuiz { exited = true } }
         waitFor { !vm.state.value.isBusy }
         assertFalse(exited); assertNotNull(vm.state.value.message)
+        main { vm.clearMessage(); vm.saveAndLeaveQuiz { exited = true } }
+        waitFor { !vm.state.value.isBusy }
+        assertFalse(exited)
+        assertEquals(listOf(0, 1), vm.state.value.answers)
+        assertNotNull(vm.state.value.message)
         main { vm.clearMessage(); vm.finishQuiz { exited = true } }
         waitFor { !vm.state.value.isBusy }
         assertFalse(exited); assertFalse(vm.state.value.activeQuiz!!.completed)

@@ -38,6 +38,22 @@ val MaterialTheme.extendedColors: ExtendedColors
     @Composable
     get() = LocalExtendedColors.current
 
+internal data class StudyColors(
+    val completed: Color,
+    val inProgress: Color,
+    val notStarted: Color,
+    val lowResult: Color,
+    val destructive: Color = DestructiveBackground,
+    val onDestructive: Color = DestructiveForeground
+)
+
+private val LightStudyColors = StudyColors(StudyGreenLight, StudyAmberLight, StudyBlueLight, StudyRedLight)
+private val DarkStudyColors = StudyColors(QuizzunioSuccessDark, QuizzunioWarningDark, StudyBlueDark, QuizzunioDarkError)
+private val LocalStudyColors = staticCompositionLocalOf { LightStudyColors }
+
+internal val MaterialTheme.studyColors: StudyColors
+    @Composable get() = LocalStudyColors.current
+
 private val DarkColorScheme = darkColorScheme(
     primary = QuizzunioDarkPrimary,
     onPrimary = QuizzunioDarkOnPrimary,
@@ -127,7 +143,10 @@ fun EmptyActivityTheme(
 
     val extendedColors = if (darkTheme) DarkExtendedColors else LightExtendedColors
 
-    CompositionLocalProvider(LocalExtendedColors provides extendedColors) {
+    CompositionLocalProvider(
+        LocalExtendedColors provides extendedColors,
+        LocalStudyColors provides if (darkTheme) DarkStudyColors else LightStudyColors
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,
@@ -158,7 +177,10 @@ fun QuizzunioTheme(
     // Selecciona los colores extendidos según el tema actual
     val extendedColors = if (darkTheme) DarkExtendedColors else LightExtendedColors
 
-    CompositionLocalProvider(LocalExtendedColors provides extendedColors) {
+    CompositionLocalProvider(
+        LocalExtendedColors provides extendedColors,
+        LocalStudyColors provides if (darkTheme) DarkStudyColors else LightStudyColors
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,

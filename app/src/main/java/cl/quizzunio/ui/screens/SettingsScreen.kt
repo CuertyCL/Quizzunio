@@ -46,6 +46,17 @@ import cl.quizzunio.ui.theme.QuizzunioTheme
 import kotlinx.coroutines.launch
 import cl.quizzunio.auth.LocalAuthViewModel
 import cl.quizzunio.auth.SessionState
+import cl.quizzunio.settings.ThemeMode
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.semantics.Role
+import androidx.compose.runtime.staticCompositionLocalOf
+
+internal enum class SettingsDestination { Server, Account }
+internal val LocalSettingsNavigation = staticCompositionLocalOf<(SettingsDestination) -> Unit> { {} }
 
 /**
  * Pantalla 05: Ajustes
@@ -60,18 +71,16 @@ fun SettingsScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val isInspection = LocalInspectionMode.current
-    val authModel = LocalAuthViewModel.current
-    val auth = authModel?.state?.collectAsState()?.value
     var information by remember { mutableStateOf<String?>(null) }
 
-    var previewDarkTheme by remember { mutableStateOf(false) }
+    var previewTheme by remember { mutableStateOf(ThemeMode.System) }
+    var choosingTheme by remember { mutableStateOf(false) }
     val appSettings = remember(context) {
         if (!isInspection) AppSettings.getInstance(context) else null
     }
-    val isDarkStored by (appSettings?.isDarkMode?.collectAsState(initial = false)
-        ?: remember { mutableStateOf(false) })
-
-    val isDarkTheme = if (isInspection) previewDarkTheme else isDarkStored
+    val storedTheme = appSettings?.themeMode?.collectAsState(initial = ThemeMode.System)?.value
+    val selectedTheme = storedTheme ?: previewTheme
+    val navigate = LocalSettingsNavigation.current
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -113,24 +122,24 @@ fun SettingsScreen(
             Column(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                AccountSettingsPanel()
+                SettingsItemCard(
+                    icon = "◎",
+                    title = "Servidor",
+                    trailingValue = "›",
+                    onClick = { navigate(SettingsDestination.Server) }
+                )
+                SettingsItemCard(
+                    icon = "♙",
+                    title = "Cuenta",
+                    trailingValue = "›",
+                    onClick = { navigate(SettingsDestination.Account) }
+                )
                 // Opción: Tema de la aplicación
                 SettingsItemCard(
                     icon = "☼",
                     title = "Tema de la aplicación",
-                    trailingValue = if (isDarkTheme) "Oscuro" else "Claro",
-                    onClick = {
-                        if (isInspection) {
-                            previewDarkTheme = !previewDarkTheme
-                        } else {
-                            coroutineScope.launch {
-                                try { appSettings?.setDarkMode(!isDarkTheme) }
-                                catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
-                                catch (error: java.io.IOException) { information = "No se pudo guardar el tema. Inténtalo de nuevo." }
-                            }
-                        }
-                        onThemeToggle()
-                    }
+                    trailingValue = selectedTheme.label,
+                    onClick = { choosingTheme = true }
                 )
 
                 // Opción: Idioma
@@ -146,7 +155,7 @@ fun SettingsScreen(
                     icon = "?",
                     title = "Ayuda y soporte",
                     trailingValue = "›",
-                    onClick = { information = "Adjunta TXT, PDF con texto, DOCX o PPTX para generar ejercicios locales. Los PDF escaneados necesitan OCR externo. El tema es un metadato y no filtra el material. Sin cuenta, tus cuestionarios solo viven en memoria. Free permite guardarlos en la nube; Premium añade generación IA en servidor. Puedes gestionar cuenta y conexión en esta pantalla." }
+                    onClick = { information = "Adjunta TXT, PDF con texto, DOCX o PPTX para generar ejercicios locales. Los PDF escaneados necesitan OCR externo. El tema es un metadato y no filtra el material. Sin cuenta, los cuestionarios y su progreso se guardan en este dispositivo. Free permite guardarlos en la nube y Premium añade generación IA en servidor." }
                 )
 
                 // Opción: Acerca de Quizzunio
@@ -158,31 +167,44 @@ fun SettingsScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(48.dp))
-
-            // Botón Cerrar Sesión (Peligro)
-            OutlinedButton(
-                onClick = onLogoutClick,
-                enabled = auth?.busy != true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-                shape = RoundedCornerShape(24.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                    contentColor = MaterialTheme.colorScheme.error
-                )
-            ) {
-                Text(
-                    text = if (auth?.session is SessionState.Authenticated) "Cerrar todas las sesiones" else "Iniciar sesión o registrarse",
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontWeight = FontWeight.Bold
-                    )
-                )
-            }
         }
     }
+    if (choosingTheme) AlertDialog(
+        onDismissRequest = { choosingTheme = false },
+        title = { Text("Tema de la aplicación") },
+        text = {
+            Column(Modifier.selectableGroup()) {
+                ThemeMode.entries.forEach { mode ->
+                    Row(
+                        Modifier.fillMaxWidth().selectable(
+                            selected = mode == selectedTheme,
+                            role = Role.RadioButton,
+                            onClick = {
+                                choosingTheme = false
+                                if (appSettings == null) {
+                                    previewTheme = mode
+                                    onThemeToggle()
+                                } else coroutineScope.launch {
+                                    try {
+                                        appSettings.setThemeMode(mode)
+                                        onThemeToggle()
+                                    } catch (error: java.io.IOException) {
+                                        information = "No se pudo guardar el tema. Inténtalo de nuevo."
+                                    }
+                                }
+                            }
+                        ).padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        RadioButton(selected = mode == selectedTheme, onClick = null)
+                        Text(mode.label)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { choosingTheme = false }) { Text("Cancelar") } }
+    )
     information?.let { message -> androidx.compose.material3.AlertDialog(onDismissRequest = { information = null }, title = { Text("Quizzunio") },
         text = { Text(message) }, confirmButton = { androidx.compose.material3.TextButton(onClick = { information = null }) { Text("Entendido") } }) }
 }

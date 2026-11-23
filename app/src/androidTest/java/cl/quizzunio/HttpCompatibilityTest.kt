@@ -6,16 +6,24 @@ import android.security.NetworkSecurityPolicy
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
+import androidx.activity.compose.setContent
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import cl.quizzunio.auth.AuthViewModel
+import cl.quizzunio.auth.LocalAuthViewModel
 import cl.quizzunio.auth.SessionState
 import cl.quizzunio.settings.AppSettings
+import cl.quizzunio.settings.ThemeMode
+import cl.quizzunio.ui.navigation.AppNavHost
+import cl.quizzunio.ui.theme.QuizzunioTheme
 import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.util.UUID
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -119,14 +127,13 @@ class HttpCompatibilityTest {
         lateinit var auth: AuthViewModel
         ui.runOnIdle { auth = ViewModelProvider(ui.activity)[AuthViewModel::class.java] }
         ui.waitUntil(30_000) { auth.state.value.session !is SessionState.Restoring && !auth.state.value.busy }
-        if (auth.state.value.session is SessionState.Unavailable) {
-            clickText("Abandonar sesión local y continuar como anónimo")
-            ui.waitUntil(30_000) { auth.state.value.session is SessionState.Anonymous && !auth.state.value.busy }
-        }
+        assertTrue(auth.state.value.session is SessionState.Anonymous)
         dismissDialogs()
 
         ui.onNodeWithContentDescription("Ajustes").performClick()
         ui.waitForIdle()
+        ui.onNodeWithText("URL del servidor").assertDoesNotExist()
+        clickText("Servidor")
         val initialServer = auth.state.value.server
 
         // Configurar HTTP LAN muestra advertencia y Cancelar no modifica la URL.
@@ -148,31 +155,126 @@ class HttpCompatibilityTest {
         assertTrue(ui.onAllNodesWithText("Conexión HTTP sin cifrado").fetchSemanticsNodes().isEmpty())
         ui.waitUntil(15_000) { auth.state.value.server == "https://ejemplo.trycloudflare.com" && !auth.state.value.busy }
 
-        // Restaurar valor predeterminado para dejar el emulador limpio.
-        ui.onAllNodes(hasSetTextAction())[0].performScrollTo().performTextReplacement("https://10.0.2.2:8443")
+        // Restaurar la URL que tenía el emulador antes de la prueba.
+        ui.onAllNodes(hasSetTextAction())[0].performScrollTo().performTextReplacement(initialServer)
         clickText("Aplicar servidor")
-        ui.waitUntil(15_000) { auth.state.value.server == "https://10.0.2.2:8443" && !auth.state.value.busy }
-        assertFalse(auth.client.configuration.isCleartext)
+        if (initialServer.startsWith("http://")) clickText("Confirmar uso de HTTP")
+        ui.waitUntil(15_000) { auth.state.value.server == initialServer && !auth.state.value.busy }
+        assertEquals(initialServer.startsWith("http://"), auth.client.configuration.isCleartext)
     }
 
     @Test fun settingsCanSwitchAndPersistBothThemes() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val settings = AppSettings.getInstance(context)
-        val initial = runBlocking { settings.isDarkMode.first() }
+        val initial = runBlocking { settings.themeMode.first() }
+        val stored = runBlocking { settings.getString(AppSettings.Keys.KEY_THEME_MODE).first() }
         lateinit var auth: AuthViewModel
         ui.runOnIdle { auth = ViewModelProvider(ui.activity)[AuthViewModel::class.java] }
         ui.waitUntil(30_000) { auth.state.value.session is SessionState.Anonymous && !auth.state.value.busy }
         dismissDialogs()
         ui.onNodeWithContentDescription("Ajustes").performClick()
         try {
-            for (dark in listOf(!initial, initial)) {
-                val label = if (dark) "Oscuro" else "Claro"
+            for (mode in ThemeMode.entries) {
                 clickText("Tema de la aplicación")
-                ui.waitUntil(10_000) { ui.onAllNodesWithText(label).fetchSemanticsNodes().isNotEmpty() }
-                assertEquals(dark, runBlocking { settings.isDarkMode.first() })
+                ui.onNode(hasText(mode.label) and hasClickAction() and hasAnyAncestor(isDialog()))
+                    .performClick()
+                ui.waitUntil(10_000) { runBlocking { settings.themeMode.first() } == mode }
+                ui.onNodeWithText(mode.label).assertExists()
+                val systemDark = ui.activity.resources.configuration.uiMode and
+                    android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
+                ui.runOnIdle {
+                    val window = ui.activity.window
+                    assertEquals(!mode.isDark(systemDark), androidx.core.view.WindowCompat
+                        .getInsetsController(window, window.decorView).isAppearanceLightStatusBars)
+                }
             }
+            ui.activityRule.scenario.recreate()
+            ui.onNodeWithText(ThemeMode.Dark.label).assertExists()
         } finally {
-            runBlocking { settings.setDarkMode(initial) }
+            runBlocking {
+                if (stored.isEmpty()) settings.removePreference(AppSettings.Keys.KEY_THEME_MODE)
+                else settings.setPreference(AppSettings.Keys.KEY_THEME_MODE, stored)
+                assertEquals(initial, settings.themeMode.first())
+            }
+        }
+    }
+
+    @Test fun authenticatedSettingsShowsVerifiedProfileAndLogsOutThroughHttp() {
+        val socket = ServerSocket(0, 8, InetAddress.getByName("127.0.0.1"))
+        val executor = Executors.newSingleThreadExecutor()
+        val logoutReceived = AtomicBoolean(false)
+        val access = "A".repeat(43)
+        val expiry = java.time.Instant.now().plusSeconds(3600).toString()
+        executor.submit {
+            try {
+                while (!socket.isClosed) socket.accept().use { client ->
+                    val input = client.getInputStream().bufferedReader(Charsets.UTF_8)
+                    val request = input.readLine().orEmpty()
+                    val headers = generateSequence { input.readLine()?.takeIf(String::isNotEmpty) }.toList()
+                    val length = headers.firstOrNull { it.startsWith("Content-Length:", ignoreCase = true) }
+                        ?.substringAfter(':')?.trim()?.toIntOrNull() ?: 0
+                    repeat(length) { input.read() }
+                    val authorized = headers.any { it.equals("Authorization: Bearer $access", ignoreCase = true) }
+                    val (status, body) = when {
+                        request.startsWith("POST /auth/login ") -> "200 OK" to
+                            """{"tokenType":"Bearer","accessToken":"$access","refreshToken":"${"E".repeat(43)}","accessExpiresAt":"$expiry","refreshExpiresAt":"$expiry","absoluteExpiresAt":"$expiry"}"""
+                        !authorized -> "401 Unauthorized" to """{"code":"INVALID_TOKEN"}"""
+                        request.startsWith("GET /auth/me ") -> "200 OK" to
+                            """{"userId":731,"username":"Perfil Ñ","email":"perfil@example.test","tier":"Premium"}"""
+                        request.startsWith("GET /quizzes?") -> "200 OK" to """{"page":1,"pageSize":20,"quizzes":[]}"""
+                        request.startsWith("POST /auth/logout ") -> {
+                            logoutReceived.set(true)
+                            "204 No Content" to ""
+                        }
+                        else -> "404 Not Found" to ""
+                    }
+                    val payload = body.toByteArray(Charsets.UTF_8)
+                    client.getOutputStream().apply {
+                        write("HTTP/1.1 $status\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: ${payload.size}\r\nConnection: close\r\n\r\n".toByteArray())
+                        write(payload)
+                        flush()
+                    }
+                }
+            } catch (error: java.net.SocketException) {
+                if (!socket.isClosed) throw error
+            }
+        }
+        try {
+            val auth = AuthViewModel(isolatedContext())
+            waitUntil { auth.state.value.session is SessionState.Anonymous && !auth.state.value.busy }
+            auth.configureServer("http://127.0.0.1:${socket.localPort}", confirmCleartext = true)
+            waitUntil { auth.state.value.server.endsWith(":${socket.localPort}") && !auth.state.value.busy }
+            auth.login("perfil", "PruebaLocal-123!")
+            waitUntil { auth.state.value.session is SessionState.Authenticated && !auth.state.value.busy }
+            val dark = mutableStateOf(false)
+            ui.runOnUiThread {
+                ui.activity.setContent {
+                    QuizzunioTheme(darkTheme = dark.value) {
+                        CompositionLocalProvider(LocalAuthViewModel provides auth) {
+                            AppNavHost(startDestination = "settings")
+                        }
+                    }
+                }
+            }
+            ui.waitUntil(15_000) { ui.onAllNodesWithText("Servidor").fetchSemanticsNodes().isNotEmpty() }
+            ui.onNodeWithText("Nombre de usuario: Perfil Ñ").assertDoesNotExist()
+            clickText("Cuenta")
+            ui.waitUntil(15_000) { ui.onAllNodesWithText("Nombre de usuario: Perfil Ñ").fetchSemanticsNodes().isNotEmpty() }
+            for (isDark in listOf(false, true)) {
+                ui.runOnIdle { dark.value = isDark }
+                ui.onNodeWithText("Nombre de usuario: Perfil Ñ").assertExists()
+                ui.onNodeWithText("Correo electrónico: perfil@example.test").assertExists()
+                ui.onNodeWithText("Suscripción: Premium").assertExists()
+                ui.onNodeWithText("URL del servidor").assertDoesNotExist()
+                ui.onAllNodesWithText("Cerrar sesión").assertCountEquals(1)
+            }
+            clickText("Cerrar sesión")
+            ui.waitUntil(15_000) { auth.state.value.session is SessionState.Anonymous && !auth.state.value.busy }
+            assertTrue(logoutReceived.get())
+            ui.onNodeWithText("Nombre de usuario: Perfil Ñ").assertDoesNotExist()
+        } finally {
+            socket.close()
+            executor.shutdownNow()
         }
     }
 

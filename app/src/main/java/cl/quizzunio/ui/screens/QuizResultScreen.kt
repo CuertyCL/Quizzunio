@@ -1,5 +1,8 @@
 package cl.quizzunio.ui.screens
 
+import cl.quizzunio.ui.theme.studyColors
+import androidx.compose.ui.platform.testTag
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -48,15 +51,15 @@ fun QuizResultScreen(
     onReviewAnswersClick: () -> Unit = {},
     onHomeClick: () -> Unit = {}
 ) {
-    val safeTotal = totalQuestions.coerceAtLeast(1)
-    val safeCorrect = correctAnswers.coerceIn(0, safeTotal)
-    val percentage = (safeCorrect * 100) / safeTotal
+    val result = quizResult(correctAnswers, totalQuestions)
+    val safeTotal = result.total
+    val safeCorrect = result.correct
+    val percentage = result.percentage
     val incorrectAnswers = safeTotal - safeCorrect
-    val heading = when {
-        percentage >= 80 -> "¡Excelente!"
-        percentage >= 50 -> "¡Buen trabajo!"
-        else -> "Sigue practicando"
-    }
+    val lowResult = result.band == ResultBand.Practice
+    val studyColors = MaterialTheme.studyColors
+    val emphasis = if (lowResult) studyColors.lowResult else studyColors.completed
+    val resultSurface = if (lowResult) MaterialTheme.extendedColors.errorContainer else MaterialTheme.extendedColors.successContainer
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -78,6 +81,13 @@ fun QuizResultScreen(
             }
         }
     ) { innerPadding ->
+        if (safeTotal == 0) {
+            Column(Modifier.fillMaxSize().padding(innerPadding).padding(24.dp)) {
+                Text("No hay resultados disponibles.")
+                Button(onClick = onHomeClick) { Text("Volver al inicio") }
+            }
+            return@Scaffold
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -94,19 +104,19 @@ fun QuizResultScreen(
                 Text(
                     text = "★",
                     fontSize = 72.sp,
-                    color = MaterialTheme.extendedColors.warning
+                    color = if (lowResult) emphasis else MaterialTheme.extendedColors.warning
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // Mensaje de felicitación
                 Text(
-                    text = heading,
+                    text = result.band.heading,
                     style = MaterialTheme.typography.headlineMedium.copy(
                         fontSize = 26.sp,
                         fontWeight = FontWeight.Bold
                     ),
-                    color = MaterialTheme.colorScheme.onBackground,
+                    color = emphasis,
                     textAlign = TextAlign.Center
                 )
 
@@ -127,9 +137,10 @@ fun QuizResultScreen(
                 Box(
                     modifier = Modifier
                         .size(170.dp)
+                        .testTag("quiz-result-score")
                         .clip(CircleShape)
-                        .background(MaterialTheme.extendedColors.successContainer)
-                        .border(BorderStroke(3.dp, MaterialTheme.extendedColors.success), CircleShape),
+                        .background(resultSurface)
+                        .border(BorderStroke(3.dp, emphasis), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
@@ -149,7 +160,7 @@ fun QuizResultScreen(
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold
                             ),
-                            color = MaterialTheme.extendedColors.success
+                            color = emphasis
                         )
                     }
                 }
@@ -180,7 +191,7 @@ fun QuizResultScreen(
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold
                                 ),
-                                color = MaterialTheme.extendedColors.success
+                                color = MaterialTheme.studyColors.completed
                             )
                         }
                     }
@@ -204,7 +215,7 @@ fun QuizResultScreen(
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold
                                 ),
-                                color = MaterialTheme.colorScheme.error
+                                color = MaterialTheme.studyColors.lowResult
                             )
                         }
                     }

@@ -20,6 +20,16 @@ import cl.quizzunio.ui.theme.QuizzunioTheme
 import cl.quizzunio.auth.LocalAuthViewModel
 import cl.quizzunio.auth.rememberAuthViewModel
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.material3.MaterialTheme
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import cl.quizzunio.settings.ThemeMode
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -28,11 +38,28 @@ class MainActivity : ComponentActivity() {
         val appSettings = AppSettings.getInstance(applicationContext)
         setContent {
             val authModel = rememberAuthViewModel(this)
-            val isDarkMode by appSettings.isDarkMode.collectAsState(initial = false)
+            val themeMode by appSettings.themeMode.collectAsState(initial = ThemeMode.System)
+            val isDarkMode = themeMode.isDark(isSystemInDarkTheme())
+            SideEffect {
+                WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = !isDarkMode
+            }
             QuizzunioTheme(darkTheme = isDarkMode) {
                 CompositionLocalProvider(LocalAuthViewModel provides authModel) {
-                AppNavHost(modifier = Modifier.fillMaxSize(), startDestination = "home")
+                    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding()) {
+                        AppNavHost(modifier = Modifier.fillMaxSize(), startDestination = "home")
+                    }
                 }
+            }
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            WindowCompat.getInsetsController(window, window.decorView).apply {
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                show(WindowInsetsCompat.Type.statusBars())
+                hide(WindowInsetsCompat.Type.navigationBars())
             }
         }
     }

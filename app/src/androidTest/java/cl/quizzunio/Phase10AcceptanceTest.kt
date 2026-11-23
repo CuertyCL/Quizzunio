@@ -84,12 +84,13 @@ class Phase10AcceptanceTest {
 
     private fun configureServerThroughUi() {
         ui.onNodeWithContentDescription("Ajustes").performClick()
+        click("Servidor")
         field(0, baseUrl); click("Aplicar servidor")
         if (ui.onAllNodesWithText("Confirmar uso de HTTP").fetchSemanticsNodes().isNotEmpty()) {
             click("Confirmar uso de HTTP")
         }
         ui.waitUntil(30_000) { auth.state.value.server == baseUrl && !auth.state.value.busy }
-        back()
+        back(); back()
     }
 
     private val material = """
@@ -234,12 +235,12 @@ class Phase10AcceptanceTest {
 
     private fun enterAccess() {
         ui.onNodeWithContentDescription("Ajustes").performClick()
-        click("Iniciar sesión o registrarse")
-        if (ui.onAllNodesWithText("Continuar al acceso").fetchSemanticsNodes().isNotEmpty()) click("Continuar al acceso")
+        click("Cuenta")
+        click("Iniciar sesión")
     }
 
     private fun loginThroughUi(name: String, secret: String = password) {
-        enterAccess(); click("Iniciar sesión")
+        enterAccess()
         field(0, name); field(1, secret); click("Iniciar sesión")
         ui.waitUntil(30_000) { (auth.state.value.session as? SessionState.Authenticated)?.user?.username == name && !auth.state.value.busy }
         waitStudy()
@@ -249,7 +250,8 @@ class Phase10AcceptanceTest {
     private fun logoutThroughUi() {
         dismissMessages()
         ui.onNodeWithContentDescription("Ajustes").performClick()
-        click("Cerrar todas las sesiones")
+        click("Cuenta")
+        click("Cerrar sesión")
         ui.waitUntil(30_000) { auth.state.value.session is SessionState.Anonymous && !auth.state.value.busy }
         ui.waitUntil(30_000) { study.accountOwner.value == null && !study.state.value.isBusy }
         assertEquals(AnonymousQuizStore(ui.activity).load().map { it.quiz }, study.state.value.quizzes)
@@ -263,7 +265,7 @@ class Phase10AcceptanceTest {
             logoutThroughUi()
         }
         assertSame(SessionState.Anonymous, auth.state.value.session)
-        enterAccess(); click("Registrarse")
+        enterAccess(); click("¿No tienes cuenta? Regístrate")
         field(0, freeName); field(1, "$freeName@example.com"); field(2, password); field(3, password); click("Registrarse")
         ui.waitUntil(30_000) { auth.state.value.session is SessionState.Authenticated && !auth.state.value.busy }
         waitStudy(); assertEquals(UserTier.Free, user().tier)
@@ -280,7 +282,8 @@ class Phase10AcceptanceTest {
         click(title)
         val question = study.state.value.activeQuiz!!.questions.first()
         click(question.answers[question.correctAnswer])
-        click("Guardar progreso y salir"); waitStudy(); dismissMessages()
+        ui.onNodeWithContentDescription("Volver").performClick(); waitStudy(); dismissMessages()
+        ui.waitUntil(30_000) { study.accountState.value.records.single { it.quiz.id == record.quiz.id }.sync == QuizSyncState.Synced }
         val remote = runBlocking { RemoteQuizRepository(auth.client, auth.session).get(record.remote.quizId) }
         assertEquals(question.correctAnswer, remote.questions.first().currentAnswer)
         assertEquals(-1, remote.questions[1].currentAnswer)
@@ -388,6 +391,7 @@ class Phase10AcceptanceTest {
         val oldAccess = runBlocking { auth.session.authorized { it } }
         val second = runBlocking { AuthApi(auth.client).login(freeName, password) }
         ui.onNodeWithContentDescription("Ajustes").performClick()
+        click("Cuenta")
         ui.onNode(hasSetTextAction() and hasText("Contraseña actual")).performScrollTo().performTextReplacement(password)
         ui.onNode(hasSetTextAction() and hasText("Nueva contraseña (12–128 puntos de código)")).performScrollTo().performTextReplacement("Phase10-Changed-456!")
         click("Cambiar contraseña y revocar sesiones")
@@ -473,8 +477,9 @@ class Phase10AcceptanceTest {
         }
         assertSame(SessionState.Anonymous, auth.state.value.session)
         ui.onNodeWithContentDescription("Ajustes").performClick()
+        click("Servidor")
         field(0, "https://10.0.2.2:8443"); click("Aplicar servidor")
         ui.waitUntil(30_000) { auth.state.value.server == "https://10.0.2.2:8443" && !auth.state.value.busy }
-        back(); assertEquals(AnonymousQuizStore(ui.activity).load().map { it.quiz }, study.state.value.quizzes)
+        back(); back(); assertEquals(AnonymousQuizStore(ui.activity).load().map { it.quiz }, study.state.value.quizzes)
     }
 }

@@ -39,6 +39,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.CircularProgressIndicator
 import cl.quizzunio.study.StudyNavigationTarget
+import cl.quizzunio.ui.screens.LocalSettingsNavigation
+import cl.quizzunio.ui.screens.SettingsDestination
+import cl.quizzunio.ui.screens.SettingsDetailScreen
 
 /**
  * Rutas y destinos de la aplicación basados en docs/maquetas/Flujo-de-App.png
@@ -49,6 +52,8 @@ sealed class Screen(val route: String) {
     object Register : Screen("register")
     object Home : Screen("home")
     object Settings : Screen("settings")
+    object ServerSettings : Screen("settings/server")
+    object AccountSettings : Screen("settings/account")
     object CreateQuiz : Screen("create_quiz")
     object AiProcessing : Screen("ai_processing")
     object QuizPlay : Screen("quiz_play")
@@ -75,7 +80,6 @@ fun AppNavHost(
     val expectedWorkspace = if (user != null) AccountQuizStore(context, authModel.session.server, user.userId).workspaceKey else null
     val navigationTarget by studyModel.navigationTarget.collectAsState()
     var previousUserId by remember { mutableStateOf<Long?>(null) }
-    var showAnonymousWarning by remember { mutableStateOf(false) }
     LaunchedEffect(user?.userId, auth?.server, auth?.session is SessionState.Anonymous) {
         if (auth?.session is SessionState.Restoring || auth?.session is SessionState.Unavailable) return@LaunchedEffect
         val coordinator = if (user != null) AccountStudyCoordinator(user.userId,
@@ -113,6 +117,11 @@ fun AppNavHost(
         studyModel.consumeNavigation()
     }
     CompositionLocalProvider(LocalStudyQuizViewModel provides studyModel,
+        LocalSettingsNavigation provides { destination ->
+            navController.navigate(if (destination == SettingsDestination.Server) Screen.ServerSettings.route else Screen.AccountSettings.route) {
+                launchSingleTop = true
+            }
+        },
         LocalQuizEditorNavigation provides { id -> navController.navigate("edit_quiz/$id") }) {
     NavHost(
         navController = navController,
@@ -194,10 +203,23 @@ fun AppNavHost(
                 },
                 onLogoutClick = {
                     if (user != null) authModel?.logout()
-                    else if (studyState.quizzes.isNotEmpty() || studyState.documents.isNotEmpty()) showAnonymousWarning = true
-                    else navController.navigate(Screen.Welcome.route)
+                    else navController.navigate(Screen.Login.route)
                 }
             )
+        }
+
+        composable(Screen.ServerSettings.route) {
+            SettingsDetailScreen(SettingsDestination.Server,
+                onBackClick = { navController.popBackStack() },
+                onAccessClick = { navController.navigate(Screen.Login.route) })
+        }
+        composable(Screen.AccountSettings.route) {
+            SettingsDetailScreen(SettingsDestination.Account,
+                onBackClick = { navController.popBackStack() },
+                onAccessClick = {
+                    if (user != null) authModel?.logout()
+                    else navController.navigate(Screen.Login.route)
+                })
         }
 
         // Pantalla 06: Crear Cuestionario
@@ -236,7 +258,12 @@ fun AppNavHost(
         composable(Screen.QuizPlay.route) {
             QuizPlayScreen(
                 onBackClick = {
-                    navController.popBackStack()
+                    if (!navController.popBackStack(Screen.Home.route, inclusive = false)) {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(navController.graph.id) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
                 },
                 onFinishQuiz = {
                     studyModel.requestResults()
@@ -277,13 +304,6 @@ fun AppNavHost(
             )
         }
     }
-    if (showAnonymousWarning) AlertDialog(
-        onDismissRequest = { showAnonymousWarning = false },
-        title = { Text("Cuestionarios del dispositivo") },
-        text = { Text("Tus cuestionarios y respuestas seguirán guardados en este dispositivo. Al iniciar sesión quedarán separados de la cuenta; puedes importarlos después mediante una acción explícita. Los materiales todavía sin generar no se conservan.") },
-        confirmButton = { TextButton(onClick = { showAnonymousWarning = false; navController.navigate(Screen.Welcome.route) }) { Text("Continuar al acceso") } },
-        dismissButton = { TextButton(onClick = { showAnonymousWarning = false }) { Text("Seguir como anónimo") } }
-    )
     auth?.message?.let { message -> AlertDialog(onDismissRequest = { authModel?.clearMessage() }, title = { Text("Cuenta") },
         text = { Text(message) }, confirmButton = { TextButton(onClick = { authModel?.clearMessage() }) { Text("Entendido") } }) }
     studyState.message?.let { message ->

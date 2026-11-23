@@ -11,6 +11,10 @@ Quizzunio es una aplicación Android en desarrollo que ayuda a estudiar a partir
 
 La aplicación está en desarrollo: las pantallas y funcionalidades pueden cambiar mientras se completa y prueba el proyecto.
 
+Inicio distingue cuestionarios por intentar, en progreso y completados. Cada tarjeta permite eliminar el cuestionario tras una confirmación. La flecha y el retroceso de Android guardan el progreso y vuelven a Inicio.
+
+En Ajustes, la configuración del servidor y la cuenta aparecen por separado. El tema sigue a Android de forma predeterminada y permite elegir Claro u Oscuro. Quizzunio mantiene visible la barra de estado y oculta la barra de navegación mientras está en primer plano. Android puede revelarla temporalmente mediante un gesto desde el borde.
+
 Sin cuenta, los cuestionarios y sus respuestas se guardan en el almacenamiento privado del dispositivo y se recuperan al volver a abrir la aplicación. Iniciar sesión los mantiene separados de la cuenta; cerrar sesión vuelve al mismo espacio anónimo. No se suben automáticamente ni se incluyen en Auto Backup. Desinstalar o borrar los datos de la aplicación elimina este almacenamiento.
 
 Desde una cuenta puedes seleccionar y confirmar la importación de un cuestionario anónimo: se conserva el original, se guarda una copia de cuenta y se suben inmediatamente el cuestionario y sus respuestas. La posición y la finalización local se conservan en la copia; el servidor almacena las respuestas actuales. Las operaciones incompletas ofrecen reintento sin crear otra importación. Los históricos de hasta 50 preguntas siguen siendo legibles, pero solo se pueden subir cuestionarios que cumplan el contrato remoto de 1–15 preguntas y contenido válido.

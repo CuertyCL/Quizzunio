@@ -393,6 +393,14 @@ class StudyQuizViewModel(
     }
 
     fun pauseQuiz(onComplete: () -> Unit) {
+        pauseQuiz(waitForSync = true, onComplete = onComplete)
+    }
+
+    internal fun saveAndLeaveQuiz(onComplete: () -> Unit) {
+        pauseQuiz(waitForSync = false, onComplete = onComplete)
+    }
+
+    private fun pauseQuiz(waitForSync: Boolean, onComplete: () -> Unit) {
         val current = mutableState.value
         val version = bindingVersion
         val quiz = current.activeQuiz ?: return
@@ -402,6 +410,21 @@ class StudyQuizViewModel(
         if (coordinator != null) {
             runAccountOperation {
                 coordinator.capture(quiz, current.answers, current.currentQuestionIndex)
+                if (!waitForSync) {
+                    if (version == bindingVersion) onComplete()
+                    if (coordinator.record(quiz.id)?.sync == QuizSyncState.Pending) scope.launch {
+                        if (account === coordinator && version == bindingVersion) {
+                            try {
+                                coordinator.synchronize(quiz.id)
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (_: Exception) {
+                                // El estado persistido sigue pendiente o en conflicto y el listado permite reintentar.
+                            }
+                        }
+                    }
+                    return@runAccountOperation
+                }
                 try {
                     coordinator.synchronize(quiz.id)
                     showMessage(if (coordinator.record(quiz.id)?.remote != null) "El servidor confirmó las respuestas." else "Progreso guardado en este dispositivo para tu cuenta.")
@@ -416,7 +439,7 @@ class StudyQuizViewModel(
         }
         runAnonymousOperation {
             anonymous.capture(AnonymousQuizRecord(quiz, current.answers, current.currentQuestionIndex))
-            showMessage("Progreso guardado en este dispositivo.")
+            if (waitForSync) showMessage("Progreso guardado en este dispositivo.")
             if (version == bindingVersion) onComplete()
         }
     }

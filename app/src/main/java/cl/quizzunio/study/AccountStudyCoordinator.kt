@@ -20,6 +20,7 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
     private val generation = Mutex()
     private var loaded = false
     private val imports = Mutex()
+    private val answerSync = Mutex()
     val workspaceKey: String get() = (store as? AccountQuizStore)?.workspaceKey ?: "account/$ownerId"
 
     /** Confirma primero la copia local; un reintento continúa la operación original. */
@@ -196,6 +197,10 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
     }
 
     suspend fun synchronize(id: String): QuizRecord {
+        return answerSync.withLock { synchronizeAnswers(id) }
+    }
+
+    private suspend fun synchronizeAnswers(id: String): QuizRecord {
         val old = record(id) ?: error("No se encontró el cuestionario.")
         val quiz = old.remote ?: return old
         check(old.sync != QuizSyncState.Conflict) { "Hay un conflicto. Conserva tus respuestas y revisa la versión del servidor antes de sustituirlas." }
@@ -203,6 +208,7 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
             val confirmed = remote.answers(quiz, old.answers)
             return writes.withLock {
                 val latest = record(id) ?: error("La copia local ya no existe.")
+                if (latest.remote?.version != quiz.version) return@withLock latest
                 val updated = latest.copy(remote = confirmed, sync = when {
                     latest.sync == QuizSyncState.Conflict -> QuizSyncState.Conflict
                     latest.answers != old.answers -> QuizSyncState.Pending
@@ -213,7 +219,9 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
             }
         } catch (error: ApiException) {
             if (error.code == "QUIZ_VERSION_CONFLICT") writes.withLock {
-                record(id)?.let { current -> persist(state.value.records.map { if (it.quiz.id == id) current.copy(sync = QuizSyncState.Conflict) else it }) }
+                record(id)?.takeIf { it.remote?.version == quiz.version }?.let { current ->
+                    persist(state.value.records.map { if (it.quiz.id == id) current.copy(sync = QuizSyncState.Conflict) else it })
+                }
             }
             throw error
         }

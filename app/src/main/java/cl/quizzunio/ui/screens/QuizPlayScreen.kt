@@ -1,5 +1,8 @@
 package cl.quizzunio.ui.screens
 
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.testTag
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -61,9 +64,14 @@ fun QuizPlayScreen(
     val studyState = studyModel?.state?.collectAsState()?.value
     val isBusy = studyState?.isBusy == true
     val authModel = LocalAuthViewModel.current
-    val auth = authModel?.state?.collectAsState()?.value
     val isReview = studyModel?.isReview?.collectAsState()?.value == true
-    BackHandler(enabled = isBusy) { }
+    val saveAndGoBack = {
+        if (!isBusy) {
+            if (studyModel != null && studyState?.activeQuiz != null) studyModel.saveAndLeaveQuiz(onBackClick)
+            else onBackClick()
+        }
+    }
+    BackHandler(onBack = saveAndGoBack)
     if (studyModel != null && studyState?.activeQuiz == null) {
         LaunchedEffect(isBusy) { if (!isBusy) onBackClick() }
         return
@@ -123,7 +131,7 @@ fun QuizPlayScreen(
                     .padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBackClick, enabled = !isBusy) {
+                IconButton(onClick = saveAndGoBack, enabled = !isBusy) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Volver",
@@ -132,13 +140,15 @@ fun QuizPlayScreen(
                 }
 
                 Text(
-                    text = "Quizzunio",
+                    text = studyState?.activeQuiz?.title.orEmpty(),
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold
                     ),
                     color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.padding(start = 8.dp)
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).padding(start = 8.dp).testTag("quiz-play-title")
                 )
             }
         }
@@ -383,18 +393,6 @@ fun QuizPlayScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Text(
-                    text = if (auth?.session is SessionState.Authenticated) "Guardar progreso y salir" else "Guardar en dispositivo y salir",
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 14.sp
-                    ),
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable(enabled = !isBusy) {
-                        if (studyModel != null) studyModel.pauseQuiz(onBackClick) else onBackClick()
-                    }
-                )
             }
         }
     }
