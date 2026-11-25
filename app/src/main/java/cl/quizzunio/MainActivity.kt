@@ -40,9 +40,12 @@ class MainActivity : ComponentActivity() {
             val authModel = rememberAuthViewModel(this)
             val themeMode by appSettings.themeMode.collectAsState(initial = ThemeMode.System)
             val isDarkMode = themeMode.isDark(isSystemInDarkTheme())
+
             SideEffect {
-                WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = !isDarkMode
+                WindowCompat.getInsetsController(window, window.decorView)
+                    .isAppearanceLightStatusBars = !isDarkMode
             }
+
             QuizzunioTheme(darkTheme = isDarkMode) {
                 CompositionLocalProvider(LocalAuthViewModel provides authModel) {
                     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding()) {

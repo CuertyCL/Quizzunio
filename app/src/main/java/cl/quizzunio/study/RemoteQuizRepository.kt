@@ -38,6 +38,7 @@ class RemoteQuizRepository(private val client: ApiClient, private val session: S
                     val item = readPage((first + index).toInt(), 1, owner, token).quizzes.singleOrNull() ?: break
                     quizzes.add(item)
                 }
+
                 RemotePage(page, pageSize, quizzes)
             }
         }

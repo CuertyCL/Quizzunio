@@ -52,8 +52,10 @@ class StudyDocumentReader(context: Context) {
 
     private fun readDocument(uri: Uri, maxPoints: Int): StudyDocument {
         require(uri.scheme == "content") { "Selecciona el archivo desde el explorador de documentos." }
+
         var name = ""
         var declaredSize = -1L
+
         resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) {
                 val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
@@ -62,10 +64,13 @@ class StudyDocumentReader(context: Context) {
                 if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) declaredSize = cursor.getLong(sizeIndex)
             }
         }
+
         val extension = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
         val type = when (extension) {
             "txt", "pdf", "docx", "pptx" -> extension
+
             "doc", "ppt" -> throw IllegalArgumentException("Convierte los archivos .doc o .ppt a .docx, .pptx o PDF antes de importarlos.")
+
             "" -> when (resolver.getType(uri)) {
                 "text/plain" -> "txt"
                 "application/pdf" -> "pdf"
@@ -73,28 +78,37 @@ class StudyDocumentReader(context: Context) {
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation" -> "pptx"
                 else -> throw IllegalArgumentException("Formato no compatible. Usa TXT, PDF, DOCX o PPTX.")
             }
+
             else -> throw IllegalArgumentException("Formato no compatible. Usa TXT, PDF, DOCX o PPTX.")
         }
+
         require(declaredSize <= MAX_FILE_BYTES) { "El archivo supera el límite de 20 MB." }
+
         val bytes = resolver.openInputStream(uri)?.use { readLimited(it, MAX_FILE_BYTES) }
             ?: throw IllegalArgumentException("No se pudo abrir el archivo. Vuelve a seleccionarlo.")
+
         require(bytes.isNotEmpty()) { "El archivo está vacío." }
+
         val text = when (type) {
             "txt" -> readText(bytes, maxPoints)
             "pdf" -> readPdf(bytes, maxPoints)
             else -> readOffice(bytes, type, maxPoints)
         }
+
         require(text.hasNonBlankContent() && text.hasValidUnicode()) {
             if (type == "pdf") "El PDF no contiene texto legible. Si es un escaneo, conviértelo con OCR antes de importarlo."
             else "El archivo no contiene texto de estudio legible."
         }
+
         require(text.codePointCount(0, text.length) <= maxPoints) { "El documento contiene demasiado texto. Divide el material en archivos más pequeños." }
+
         return StudyDocument(uri.toString(), name.ifBlank { "Documento.$type" }, bytes.size.toLong(), type.uppercase(Locale.ROOT), text)
     }
 
     private fun readText(bytes: ByteArray, maxPoints: Int): String {
         val charset: Charset
         val offset: Int
+
         when {
             bytes.size >= 3 && bytes[0] == 0xef.toByte() && bytes[1] == 0xbb.toByte() && bytes[2] == 0xbf.toByte() -> {
                 charset = Charsets.UTF_8; offset = 3
@@ -107,6 +121,7 @@ class StudyDocumentReader(context: Context) {
             }
             else -> { charset = Charsets.UTF_8; offset = 0 }
         }
+
         val text = try {
             charset.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
                 .onUnmappableCharacter(CodingErrorAction.REPORT)
@@ -120,9 +135,11 @@ class StudyDocumentReader(context: Context) {
                 throw IllegalArgumentException("La codificación del TXT no es válida. Guárdalo como UTF-8.", invalid)
             }
         }
+
         require(text.none { it == '\u0000' } && text.count { it.isISOControl() && it !in "\n\r\t" } < 5) {
             "El TXT contiene datos binarios. Guarda el documento como texto UTF-8."
         }
+
         require(text.length <= maxPoints * 2) { "El TXT contiene demasiado texto. Divide el material." }
         return text
     }
@@ -131,7 +148,9 @@ class StudyDocumentReader(context: Context) {
         require(bytes.take(1024).toByteArray().toString(Charsets.ISO_8859_1).contains("%PDF-")) {
             "El archivo no es un PDF válido."
         }
+
         PDFBoxResourceLoader.init(appContext)
+
         try {
             return PDDocument.load(bytes).use { document ->
                 require(document.currentAccessPermission.canExtractContent()) { "Este PDF no permite extraer texto." }
@@ -143,12 +162,14 @@ class StudyDocumentReader(context: Context) {
                     paragraphEnd = "\n"
                     pageEnd = "\n"
                 }
+
                 for (page in 1..document.numberOfPages) {
                     stripper.startPage = page
                     stripper.endPage = page
                     text.append(stripper.getText(document)).append('\n')
                     require(text.length <= maxPoints * 2) { "El PDF contiene demasiado texto. Divide el material." }
                 }
+
                 text.toString()
             }
         } catch (error: InvalidPasswordException) {
@@ -160,9 +181,11 @@ class StudyDocumentReader(context: Context) {
         require(bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4b.toByte()) {
             "El archivo no es un $type válido o está protegido con contraseña."
         }
+
         val parts = mutableMapOf<String, ByteArray>()
         var expandedSize = 0
         var entries = 0
+
         ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
@@ -187,6 +210,7 @@ class StudyDocumentReader(context: Context) {
                 zip.closeEntry()
             }
         }
+
         val orderedParts = if (type == "docx") {
             listOf(parts["word/document.xml"] ?: throw IllegalArgumentException("El DOCX no contiene un documento válido."))
         } else {
@@ -202,6 +226,7 @@ class StudyDocumentReader(context: Context) {
                     }
                 }
             }
+
             val slides = mutableListOf<ByteArray>()
             parseXml(parts["ppt/presentation.xml"] ?: throw IllegalArgumentException("El PPTX está incompleto.")) { parser ->
                 if (parser.eventType == XmlPullParser.START_TAG && parser.name == "sldId") {
@@ -211,9 +236,11 @@ class StudyDocumentReader(context: Context) {
                     slides.add(parts[path] ?: throw IllegalArgumentException("Falta una diapositiva del PPTX."))
                 }
             }
+
             require(slides.isNotEmpty()) { "El PPTX no contiene diapositivas legibles." }
             slides
         }
+
         val text = StringBuilder()
         orderedParts.forEach { part ->
             var inText = false
@@ -286,6 +313,7 @@ class StudyDocumentReader(context: Context) {
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "application/vnd.openxmlformats-officedocument.presentationml.presentation"
         )
+
         private const val MAX_FILE_BYTES = 20 * 1024 * 1024
         private const val MAX_EXPANDED_BYTES = 50 * 1024 * 1024
         private const val MAX_XML_BYTES = 8 * 1024 * 1024

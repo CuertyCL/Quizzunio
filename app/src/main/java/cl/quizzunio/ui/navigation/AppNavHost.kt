@@ -80,20 +80,33 @@ fun AppNavHost(
     val expectedWorkspace = if (user != null) AccountQuizStore(context, authModel.session.server, user.userId).workspaceKey else null
     val navigationTarget by studyModel.navigationTarget.collectAsState()
     var previousUserId by remember { mutableStateOf<Long?>(null) }
+
     LaunchedEffect(user?.userId, auth?.server, auth?.session is SessionState.Anonymous) {
         if (auth?.session is SessionState.Restoring || auth?.session is SessionState.Unavailable) return@LaunchedEffect
-        val coordinator = if (user != null) AccountStudyCoordinator(user.userId,
-            RemoteQuizRepository(authModel.client, authModel.session), AccountQuizStore(context, authModel.session.server, user.userId)) else null
+
+        val coordinator = if (user != null)
+            AccountStudyCoordinator(
+                user.userId,
+                RemoteQuizRepository(authModel.client, authModel.session),
+                AccountQuizStore(context, authModel.session.server, user.userId)
+            ) else null
+
         if (studyModel.workspace.value != expectedWorkspace) studyModel.bindAccount(coordinator)
-        if (previousUserId != null && user == null) navController.navigate(Screen.Home.route) {
-            popUpTo(navController.graph.id) { inclusive = true }
-        }
+
+        if (previousUserId != null && user == null)
+            navController.navigate(Screen.Home.route) {
+                popUpTo(navController.graph.id) { inclusive = true }
+            }
+
         previousUserId = user?.userId
     }
+
     if (auth?.session is SessionState.Restoring || auth?.session is SessionState.Unavailable) {
         Column {
-            if (auth.session is SessionState.Restoring) { CircularProgressIndicator(); Text("Restaurando sesión...") }
-            else {
+            if (auth.session is SessionState.Restoring) {
+                CircularProgressIndicator()
+                Text("Restaurando sesión...")
+            } else {
                 Text((auth.session as SessionState.Unavailable).message)
                 TextButton(onClick = { authModel?.restore() }, enabled = !auth.busy) { Text("Reintentar restauración") }
                 TextButton(onClick = { authModel?.abandon() }, enabled = !auth.busy) { Text("Abandonar sesión local y continuar como anónimo") }
@@ -102,21 +115,33 @@ fun AppNavHost(
         }
         return
     }
-    if (accountOwner != user?.userId || workspace != expectedWorkspace) { CircularProgressIndicator(); return }
+
+    if (accountOwner != user?.userId || workspace != expectedWorkspace) {
+        CircularProgressIndicator()
+        return
+    }
+
     LaunchedEffect(navigationTarget) {
         when (navigationTarget) {
             StudyNavigationTarget.Play -> if (navController.currentDestination?.route == Screen.CreateQuiz.route) {
-                navController.navigate(Screen.QuizPlay.route) { popUpTo(Screen.CreateQuiz.route) { inclusive = true } }
+                navController.navigate(Screen.QuizPlay.route) {
+                    popUpTo(Screen.CreateQuiz.route) { inclusive = true }
+                }
             }
+
             StudyNavigationTarget.Results -> if (navController.currentDestination?.route == Screen.QuizPlay.route) {
                 navController.navigate(Screen.QuizResult.route) { popUpTo(Screen.Home.route) }
             }
+
             StudyNavigationTarget.EditorClosed -> if (navController.currentDestination?.route == "edit_quiz/{localId}") navController.popBackStack()
+
             null -> Unit
         }
         studyModel.consumeNavigation()
     }
-    CompositionLocalProvider(LocalStudyQuizViewModel provides studyModel,
+
+    CompositionLocalProvider(
+        LocalStudyQuizViewModel provides studyModel,
         LocalSettingsNavigation provides { destination ->
             navController.navigate(if (destination == SettingsDestination.Server) Screen.ServerSettings.route else Screen.AccountSettings.route) {
                 launchSingleTop = true
@@ -217,8 +242,7 @@ fun AppNavHost(
             SettingsDetailScreen(SettingsDestination.Account,
                 onBackClick = { navController.popBackStack() },
                 onAccessClick = {
-                    if (user != null) authModel?.logout()
-                    else navController.navigate(Screen.Login.route)
+                    if (user != null) authModel?.logout() else navController.navigate(Screen.Login.route)
                 })
         }
 
@@ -304,17 +328,26 @@ fun AppNavHost(
             )
         }
     }
-    auth?.message?.let { message -> AlertDialog(onDismissRequest = { authModel?.clearMessage() }, title = { Text("Cuenta") },
-        text = { Text(message) }, confirmButton = { TextButton(onClick = { authModel?.clearMessage() }) { Text("Entendido") } }) }
-    studyState.message?.let { message ->
+
+    auth?.message?.let { message ->
+        AlertDialog(
+            onDismissRequest = { authModel?.clearMessage() },
+            title = { Text("Cuenta") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { authModel?.clearMessage() }) { Text("Entendido") }
+            }
+        )
+    }
+
+        studyState.message?.let { message ->
         AlertDialog(
             onDismissRequest = { studyModel.clearMessage() },
             title = { Text("Cuestionarios") },
             text = { Text(message) },
             confirmButton = {
                 TextButton(onClick = { studyModel.clearMessage() }) { Text("Entendido") }
-            }
-        )
-    }
+            })
+        }
     }
 }

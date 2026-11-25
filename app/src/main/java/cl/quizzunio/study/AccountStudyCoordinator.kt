@@ -109,18 +109,32 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
         if (state.value.busy || (next && !state.value.hasMore)) return
         val page = if (next) state.value.page + 1 else 1
         mutableState.value = state.value.copy(busy = true, error = null)
+
         try {
             val response = remote.list(page)
+
             writes.withLock {
                 val previous = state.value.records
-                val records = previous.filter { next || it.remote == null || it.sync == QuizSyncState.Pending || it.sync == QuizSyncState.Conflict }.toMutableList()
+                val records = previous.filter {
+                    next || it.remote == null || it.sync == QuizSyncState.Pending || it.sync == QuizSyncState.Conflict
+                }.toMutableList()
+
                 response.quizzes.forEach { quiz ->
                     val position = records.indexOfFirst { it.remote?.quizId == quiz.quizId }
                     val old = records.getOrNull(position) ?: previous.firstOrNull { it.remote?.quizId == quiz.quizId }
+
                     val updated = when {
-                        old == null -> QuizRecord(quiz.toStudyQuiz(), ownerId, QuizOrigin.Server, quiz,
-                            quiz.questions.map { it.currentAnswer.takeIf { n -> n >= 0 } }, sync = QuizSyncState.Synced)
+                        old == null -> QuizRecord(
+                            quiz.toStudyQuiz(),
+                            ownerId,
+                            QuizOrigin.Server,
+                            quiz,
+                            quiz.questions.map { it.currentAnswer.takeIf { n -> n >= 0 } },
+                            sync = QuizSyncState.Synced
+                        )
+
                         (old.remote?.version ?: 0) > quiz.version -> old
+
                         old.sync == QuizSyncState.Pending || old.sync == QuizSyncState.Conflict -> old.copy(sync =
                             if (old.remote?.version != quiz.version) QuizSyncState.Conflict else old.sync)
                         else -> old.copy(quiz = quiz.toStudyQuiz(old.quiz.id).let { refreshed ->
@@ -132,12 +146,15 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
                     }
                     if (position >= 0) records[position] = updated else records.add(updated)
                 }
+
                 persist(records)
                 mutableState.value = state.value.copy(page = page, hasMore = response.quizzes.size == response.pageSize)
             }
         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
-        catch (error: Exception) { mutableState.value = state.value.copy(error = error.message ?: "No se pudo consultar la nube."); throw error }
-        finally { mutableState.value = state.value.copy(busy = false) }
+        catch (error: Exception) {
+            mutableState.value = state.value.copy(error = error.message ?: "No se pudo consultar la nube.")
+            throw error
+        } finally { mutableState.value = state.value.copy(busy = false) }
     }
 
     suspend fun generate(title: String, text: String, count: Int): QuizRecord =
@@ -153,6 +170,7 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
                 onRequest()
             }
         }
+
         try {
             val quiz = if (remote is RemoteQuizRepository) {
                 remote.generate(title, text, count, beforeSubmission)
@@ -160,7 +178,15 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
                 beforeSubmission()
                 remote.generate(title, text, count)
             }
-            val record = QuizRecord(quiz.toStudyQuiz(), ownerId, QuizOrigin.Server, quiz, sync = QuizSyncState.Synced)
+
+            val record = QuizRecord(
+                quiz.toStudyQuiz(),
+                ownerId,
+                QuizOrigin.Server,
+                quiz,
+                sync = QuizSyncState.Synced
+            )
+
             replace(record)
             setGenerationUncertain(false)
             record
@@ -189,16 +215,22 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
     suspend fun upload(id: String): QuizRecord {
         val old = writes.withLock {
             val current = record(id) ?: error("No se encontró el cuestionario.")
+
             if (current.remote == null && current.sync != QuizSyncState.Pending) {
                 // La marca y la captura comparten el bloqueo para no enviar un título anterior a un renombrado concurrente.
                 persist(state.value.records.map { if (it.quiz.id == id) it.copy(sync = QuizSyncState.Pending) else it })
             }
             record(id) ?: error("No se encontró el cuestionario.")
         }
+
         val quiz = remote.importLocal(old)
+
         return writes.withLock {
             val latest = record(id) ?: error("La copia local ya no existe. Concilia la operación antes de repetirla.")
-            val updated = latest.copy(remote = quiz, sync = if (latest.answers.any { it != null }) QuizSyncState.Pending else QuizSyncState.Synced)
+            val updated = latest.copy(
+                remote = quiz,
+                sync = if (latest.answers.any { it != null }) QuizSyncState.Pending else QuizSyncState.Synced
+            )
             persist(listOf(updated) + state.value.records.filterNot { it.quiz.id == id || it.remote?.quizId == quiz.quizId })
             updated
         }
@@ -217,11 +249,14 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
             return writes.withLock {
                 val latest = record(id) ?: error("La copia local ya no existe.")
                 if (latest.remote?.version != quiz.version) return@withLock latest
-                val updated = latest.copy(remote = confirmed, sync = when {
-                    latest.sync == QuizSyncState.Conflict -> QuizSyncState.Conflict
-                    latest.answers != old.answers -> QuizSyncState.Pending
-                    else -> QuizSyncState.Synced
-                })
+                val updated = latest.copy(
+                    remote = confirmed,
+                    sync = when {
+                        latest.sync == QuizSyncState.Conflict -> QuizSyncState.Conflict
+                        latest.answers != old.answers -> QuizSyncState.Pending
+                        else -> QuizSyncState.Synced
+                    }
+                )
                 persist(state.value.records.map { if (it.quiz.id == id) updated else it })
                 updated
             }
@@ -266,8 +301,11 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
         writes.withLock renameWrite@ {
             QuizContentValidator.title(title)
             val old = record(id) ?: error("No se encontró el cuestionario.")
+
             if (old.quiz.title == title) return@renameWrite
+
             val quiz = old.remote
+
             check(quiz != null || (old.sync == QuizSyncState.LocalOnly && !AnonymousImportIdentity.isImported(id))) {
                 "Hay una subida sin confirmar. Reintenta el guardado en la nube antes de renombrar; se conserva la clave de la operación original."
             }

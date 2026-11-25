@@ -37,6 +37,7 @@ class StudyQuizRepository(context: Context) {
         accountDirectory = if (server != null && userId != null && userId > 0) {
             val namespace = java.security.MessageDigest.getInstance("SHA-256")
                 .digest(server.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+
             File(directory, "$namespace/$userId")
         } else null
     }
@@ -44,12 +45,14 @@ class StudyQuizRepository(context: Context) {
     fun load(): StudyQuizLoadResult {
         val directory = accountDirectory ?: return StudyQuizLoadResult(emptyList(), 0)
         if (!directory.exists()) return StudyQuizLoadResult(emptyList(), 0)
+
         val files = directory.listFiles() ?: throw IOException("No se pudieron leer los cuestionarios guardados.")
         val ids = files.sortedByDescending { it.lastModified() }.mapNotNull { file ->
             val name = file.name.removeSuffix(".bak")
             if (name.endsWith(".json")) name.removeSuffix(".json") else null
         }.filter { ID_PATTERN.matches(it) }.distinct()
         var unreadableCount = 0
+
         val quizzes = ids.mapNotNull { id ->
             try {
                 val atomicFile = AtomicFile(File(directory, "$id.json"))
@@ -78,15 +81,21 @@ class StudyQuizRepository(context: Context) {
 
     fun save(quiz: StudyQuiz) {
         val directory = accountDirectory ?: throw IllegalStateException("El modo anónimo solo conserva cuestionarios en memoria.")
+
         require(ID_PATTERN.matches(quiz.id)) { "El identificador del cuestionario no es válido." }
         validate(quiz)
+
         if (!directory.exists() && !directory.mkdirs()) {
             throw IOException("No se pudo preparar el almacenamiento del cuestionario.")
         }
+
         val encoded = encode(quiz).toString()
+
         require(encoded.length <= MAX_SAVED_CHARACTERS) { "El cuestionario supera el tamaño permitido." }
+
         val atomicFile = AtomicFile(File(directory, "${quiz.id}.json"))
         val stream = atomicFile.startWrite()
+
         try {
             stream.write(encoded.toByteArray(Charsets.UTF_8))
             atomicFile.finishWrite(stream)
@@ -142,13 +151,18 @@ class StudyQuizRepository(context: Context) {
         QuizContentValidator.title(quiz.title)
         require(quiz.topic.codePointCount(0, quiz.topic.length) <= 200)
         quiz.questions.forEach { question ->
-            QuizContentValidator.question(question.question, question.answers, question.correctAnswer)
+            QuizContentValidator.question(
+                question.question,
+                question.answers,
+                question.correctAnswer
+            )
         }
     }
 
     private fun validateStructure(quiz: StudyQuiz) {
         require(quiz.title.hasValidUnicode() && quiz.topic.hasValidUnicode())
         require(quiz.questions.size in 1..50)
+
         quiz.questions.forEach { question ->
             require(question.answers.size == 4 && question.correctAnswer in question.answers.indices)
             require(question.question.hasValidUnicode() && question.answers.all { it.hasValidUnicode() })

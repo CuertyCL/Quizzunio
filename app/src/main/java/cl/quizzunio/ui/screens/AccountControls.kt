@@ -38,51 +38,159 @@ internal fun AccountSettingsPanel(onAccessClick: () -> Unit, section: SettingsDe
     var replacement by remember { mutableStateOf("") }
     var deleting by remember { mutableStateOf(false) }
     var abandoning by remember { mutableStateOf(false) }
+
     if (section != SettingsDestination.Account) SettingsSection("Configuración de servidor") {
-        OutlinedTextField(endpoint, { endpoint = it }, label = { Text("URL del servidor") },
-            enabled = !auth.busy && user == null, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(
+            endpoint,
+            { endpoint = it },
+            label = { Text("URL del servidor") },
+            enabled = !auth.busy && user == null,
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+
         Text("Se recomienda HTTPS con certificado válido (predeterminado https://10.0.2.2:8443). HTTP sin cifrado requiere confirmación explícita y solo debe usarse en redes controladas (LAN o VPN).")
-        if (user == null) TextButton(onClick = {
-            val candidate = runCatching { ApiConfiguration(endpoint, false) }.getOrNull()
-            if (candidate != null && candidate.isCleartext) pendingHttpUrl = candidate.baseUrl
-            else model.configureServer(endpoint)
-        }, enabled = !auth.busy) { Text("Aplicar servidor") }
-        TextButton(onClick = { model.checkStatus() }, enabled = !auth.busy) { Text("Comprobar estado del servidor") }
+
+        if (user == null) TextButton(
+            onClick = {
+                val candidate = runCatching { ApiConfiguration(endpoint, false) }.getOrNull()
+
+                if (candidate != null && candidate.isCleartext) pendingHttpUrl = candidate.baseUrl
+                else model.configureServer(endpoint)
+            },
+            enabled = !auth.busy
+        ) {
+            Text("Aplicar servidor")
+        }
+
+        TextButton(
+            onClick = { model.checkStatus() },
+            enabled = !auth.busy
+        ) {
+            Text("Comprobar estado del servidor")
+        }
+
         auth.status?.let { Text(it) }
     }
+
     if (section != SettingsDestination.Server) SettingsSection("Cuenta") {
         if (user == null) {
             Text("Nombre de usuario: Anónimo")
-            Button(onClick = onAccessClick, enabled = !auth.busy, shape = RoundedCornerShape(24.dp)) {
-                Text("Iniciar sesión")
-            }
+            Button(
+                onClick = onAccessClick,
+                enabled = !auth.busy,
+                shape = RoundedCornerShape(24.dp)
+            ) { Text("Iniciar sesión") }
         }
+
         if (user != null) {
             Text("Nombre de usuario: ${user.username}")
             Text("Correo electrónico: ${user.email}")
             Text("Suscripción: ${user.tier.name}")
-            DestructiveButton("Cerrar sesión", enabled = !auth.busy, onClick = onAccessClick)
-            OutlinedTextField(currentPassword, { currentPassword = it },
-                label = { Text("Contraseña actual") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, enabled = !auth.busy)
-            OutlinedTextField(replacement, { replacement = it },
-                label = { Text("Nueva contraseña (12–128 puntos de código)") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, enabled = !auth.busy)
-            TextButton(onClick = { model.changePassword(currentPassword, replacement); currentPassword = ""; replacement = "" }, enabled = !auth.busy) { Text("Cambiar contraseña y revocar sesiones") }
-            TextButton(onClick = { deleting = true }, enabled = !auth.busy) { Text("Eliminar cuenta y sus cuestionarios") }
-            TextButton(onClick = { abandoning = true }, enabled = !auth.busy) { Text("Abandonar sesión solo en este dispositivo") }
+
+            DestructiveButton(
+                "Cerrar sesión",
+                enabled = !auth.busy,
+                onClick = onAccessClick
+            )
+
+            OutlinedTextField(
+                currentPassword,
+                { currentPassword = it },
+                label = { Text("Contraseña actual") },
+                visualTransformation = PasswordVisualTransformation(),
+                singleLine = true,
+                enabled = !auth.busy
+            )
+
+            OutlinedTextField(
+                replacement,
+                { replacement = it },
+                label = { Text("Nueva contraseña (12–128 puntos de código)") },
+                visualTransformation = PasswordVisualTransformation(),
+                singleLine = true,
+                enabled = !auth.busy
+            )
+
+            TextButton(
+                onClick = {
+                    model.changePassword(currentPassword, replacement)
+                    currentPassword = ""
+                    replacement = "" },
+                enabled = !auth.busy
+            ) { Text("Cambiar contraseña y revocar sesiones") }
+
+            TextButton(
+                onClick = { deleting = true },
+                enabled = !auth.busy
+            ) { Text("Eliminar cuenta y sus cuestionarios") }
+
+            TextButton(
+                onClick = { abandoning = true },
+                enabled = !auth.busy
+            ) { Text("Abandonar sesión solo en este dispositivo") }
         }
     }
-    pendingHttpUrl?.let { target -> AlertDialog(onDismissRequest = { pendingHttpUrl = null }, title = { Text("Conexión HTTP sin cifrado") },
-        text = { Text("La dirección «$target» usa HTTP sin cifrado de transporte. Tus credenciales, tokens y cuestionarios se enviarán sin cifrar por la red.\n\nÚsala únicamente en una red controlada (LAN o VPN de confianza).") },
-        confirmButton = { TextButton(onClick = { pendingHttpUrl = null; model.configureServer(target, confirmCleartext = true) }) { Text("Confirmar uso de HTTP") } },
-        dismissButton = { TextButton(onClick = { pendingHttpUrl = null }) { Text("Cancelar") } }) }
-    if (deleting) AlertDialog(onDismissRequest = { deleting = false }, title = { Text("Eliminar cuenta") },
-        text = { Text("Se eliminarán tu cuenta, cuestionarios y sesiones del servidor. Esta operación no se puede deshacer.") },
-        confirmButton = { TextButton(onClick = { deleting = false; model.deleteAccount(currentPassword); currentPassword = "" }) { Text("Confirmar eliminación") } },
-        dismissButton = { TextButton(onClick = { deleting = false }) { Text("Cancelar") } })
-    if (abandoning) AlertDialog(onDismissRequest = { abandoning = false }, title = { Text("Abandonar sesión local") },
-        text = { Text("Se retirarán los tokens de este dispositivo. Las sesiones del servidor no se revocarán y los datos de esta cuenta quedarán ocultos.") },
-        confirmButton = { TextButton(onClick = { abandoning = false; model.abandon() }) { Text("Abandonar") } },
-        dismissButton = { TextButton(onClick = { abandoning = false }) { Text("Cancelar") } })
+
+
+    pendingHttpUrl?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingHttpUrl = null },
+            title = { Text("Conexión HTTP sin cifrado") },
+            text = {
+                Text("La dirección «$target» usa HTTP sin cifrado de transporte. Tus credenciales, tokens y cuestionarios se enviarán sin cifrar por la red.\n\nÚsala únicamente en una red controlada (LAN o VPN de confianza).") },
+
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingHttpUrl = null
+                        model.configureServer(target, confirmCleartext = true)
+                    }
+                ) { Text("Confirmar uso de HTTP") } },
+
+            dismissButton = {
+                TextButton(
+                    onClick = { pendingHttpUrl = null }
+                ) { Text("Cancelar") }
+            })
+    }
+
+    if (deleting)
+        AlertDialog(
+            onDismissRequest = { deleting = false },
+            title = { Text("Eliminar cuenta") },
+            text = { Text("Se eliminarán tu cuenta, cuestionarios y sesiones del servidor. Esta operación no se puede deshacer.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        deleting = false
+                        model.deleteAccount(currentPassword)
+                        currentPassword = ""
+                    }
+                ) { Text("Confirmar eliminación") } },
+
+            dismissButton = {
+                TextButton(
+                    onClick = { deleting = false }
+                ) { Text("Cancelar") }
+            }
+        )
+
+    if (abandoning)
+        AlertDialog(
+            onDismissRequest = { abandoning = false },
+            title = { Text("Abandonar sesión local") },
+            text = { Text("Se retirarán los tokens de este dispositivo. Las sesiones del servidor no se revocarán y los datos de esta cuenta quedarán ocultos.") },
+            confirmButton = {
+                TextButton(
+                    onClick = { abandoning = false; model.abandon() }
+                ) { Text("Abandonar") } },
+            dismissButton = {
+                TextButton(
+                    onClick = { abandoning = false }
+                ) { Text("Cancelar") }
+            }
+        )
 }
 
 @Composable
@@ -108,6 +216,7 @@ internal fun AccountQuizActions(record: QuizRecord, showDelete: Boolean) {
     val state by model.state.collectAsState()
     val edit = LocalQuizEditorNavigation.current
     var replace by remember { mutableStateOf(false) }
+
     Column(Modifier.testTag("quiz-actions-${record.quiz.id}")) {
         if (AnonymousImportIdentity.isImported(record.quiz.id)) {
             Text(when {
@@ -116,40 +225,87 @@ internal fun AccountQuizActions(record: QuizRecord, showDelete: Boolean) {
                 record.sync == QuizSyncState.Pending -> "Cuestionario remoto creado · Respuestas pendientes"
                 else -> "Importación y respuestas sincronizadas · Posición conservada en este dispositivo"
             })
+
             if (record.remote == null || record.sync != QuizSyncState.Synced) {
-                TextButton(onClick = { model.retryAnonymousImport(record.quiz.id) }, enabled = !state.isBusy) { Text("Reintentar importación y respuestas") }
+                TextButton(
+                    onClick = { model.retryAnonymousImport(record.quiz.id) },
+                    enabled = !state.isBusy
+                ) { Text("Reintentar importación y respuestas") }
             }
         }
+
         Text(if (record.remote == null) {
-            if (record.sync == QuizSyncState.Pending) "Local · Subida pendiente de confirmación" else "Local · Solo en este dispositivo"
+            if (record.sync == QuizSyncState.Pending)
+                "Local · Subida pendiente de confirmación" else "Local · Solo en este dispositivo"
         } else "Nube · Versión ${record.remote.version} · ${when (record.sync) {
             QuizSyncState.Synced -> "Sincronizado"
             QuizSyncState.Pending -> "Respuestas pendientes"
             QuizSyncState.Conflict -> "Conflicto de versión"
             QuizSyncState.LocalOnly -> "Local"
         }}")
+
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             if (record.remote == null) {
                 TextButton(
-                    onClick = { if (AnonymousImportIdentity.isImported(record.quiz.id)) model.retryAnonymousImport(record.quiz.id) else model.uploadQuiz(record.quiz.id) },
+                    onClick = {
+                        if (AnonymousImportIdentity.isImported(record.quiz.id)) model.retryAnonymousImport(record.quiz.id)
+                        else model.uploadQuiz(record.quiz.id) },
                     enabled = !state.isBusy && record.quiz.questions.size <= QuizContentValidator.MAX_QUESTIONS
                 ) { Text("Guardar en nube") }
             } else {
-                TextButton(onClick = { edit(record.quiz.id) }, enabled = !state.isBusy) { Text("Editar") }
-                TextButton(onClick = { model.synchronizeQuiz(record.quiz.id) }, enabled = !state.isBusy) { Text("Sincronizar") }
+                TextButton(
+                    onClick = { edit(record.quiz.id) },
+                    enabled = !state.isBusy
+                ) { Text("Editar") }
+
+                TextButton(
+                    onClick = { model.synchronizeQuiz(record.quiz.id) },
+                    enabled = !state.isBusy
+                ) { Text("Sincronizar") }
             }
-            if (showDelete) QuizDeleteAction(record.quiz.id, record.quiz.title, authenticated = true, remote = record.remote != null)
+
+            if (showDelete)
+                QuizDeleteAction(
+                    record.quiz.id,
+                    record.quiz.title,
+                    authenticated = true,
+                    remote = record.remote != null
+                )
         }
+
         if (record.remote == null && record.quiz.questions.size > QuizContentValidator.MAX_QUESTIONS) {
             Text("La nube admite hasta 15 preguntas. Este cuestionario se conserva en el dispositivo.")
         }
+
         if (record.remote != null) {
-            TextButton(onClick = { model.inspectServerVersion(record.quiz.id) }, enabled = !state.isBusy) { Text("Consultar versión del servidor") }
-            TextButton(onClick = { replace = true }, enabled = !state.isBusy) { Text("Sustituir por versión del servidor") }
+            TextButton(
+                onClick = { model.inspectServerVersion(record.quiz.id) },
+                enabled = !state.isBusy
+            ) { Text("Consultar versión del servidor") }
+
+            TextButton(
+                onClick = { replace = true },
+                enabled = !state.isBusy
+            ) { Text("Sustituir por versión del servidor") }
         }
     }
-    if (replace) AlertDialog(onDismissRequest = { replace = false }, title = { Text("Sustituir estado local") },
-        text = { Text("Se descartarán las respuestas pendientes de este cuestionario y se cargará el contenido y las respuestas actuales del servidor.") },
-        confirmButton = { TextButton(onClick = { replace = false; model.acceptServerVersion(record.quiz.id) }) { Text("Cargar y sustituir") } },
-        dismissButton = { TextButton(onClick = { replace = false }) { Text("Conservar mis respuestas") } })
+
+    if (replace)
+        AlertDialog(
+            onDismissRequest = { replace = false },
+            title = { Text("Sustituir estado local") },
+            text = { Text("Se descartarán las respuestas pendientes de este cuestionario y se cargará el contenido y las respuestas actuales del servidor.") },
+            confirmButton = { TextButton(
+                onClick = {
+                    replace = false
+                    model.acceptServerVersion(record.quiz.id)
+                }
+            ) { Text("Cargar y sustituir") } },
+
+            dismissButton = {
+                TextButton(
+                    onClick = { replace = false }
+                ) { Text("Conservar mis respuestas") }
+            }
+        )
 }

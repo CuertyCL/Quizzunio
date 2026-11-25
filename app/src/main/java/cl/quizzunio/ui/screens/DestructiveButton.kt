@@ -20,7 +20,10 @@ internal fun DestructiveButton(label: String, enabled: Boolean, onClick: () -> U
         enabled = enabled,
         modifier = Modifier.heightIn(min = 48.dp),
         shape = RoundedCornerShape(24.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = colors.destructive, contentColor = colors.onDestructive),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = colors.destructive,
+            contentColor = colors.onDestructive
+        ),
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
     ) {
         Text(label, style = MaterialTheme.typography.labelLarge)

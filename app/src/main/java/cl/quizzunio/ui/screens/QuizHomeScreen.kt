@@ -165,6 +165,7 @@ fun QuizHomeScreen(
                         }
                     }
                     if (sampleQuizzes.isEmpty() && studyState?.isBusy != true) Text("No hay cuestionarios que coincidan con la búsqueda y el filtro.")
+
                     // Botón Crear Cuestionario
                     Button(
                         onClick = onCreateQuizClick,

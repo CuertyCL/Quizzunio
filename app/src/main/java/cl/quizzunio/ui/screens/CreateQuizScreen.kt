@@ -151,11 +151,24 @@ fun CreateQuizScreen(
             Text(if (session is SessionState.Authenticated) "${session.user.tier.name} · ${if (source == GenerationSource.Local) "Generación local" else "Generación en servidor"} · 1–15 preguntas"
                 else "Generación local · Cuestionarios y respuestas guardados en este dispositivo.")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = source == GenerationSource.Local, onClick = { source = GenerationSource.Local }, enabled = !isBusy, label = { Text("Local") })
-                FilterChip(selected = source == GenerationSource.Server, onClick = { source = GenerationSource.Server }, enabled = !isBusy && AccessPolicy.canGenerateRemotely(session), label = { Text("Servidor · Premium") })
+                FilterChip(
+                    selected = source == GenerationSource.Local,
+                    onClick = { source = GenerationSource.Local },
+                    enabled = !isBusy,
+                    label = { Text("Local") }
+                )
+                FilterChip(
+                    selected = source == GenerationSource.Server,
+                    onClick = { source = GenerationSource.Server },
+                    enabled = !isBusy && AccessPolicy.canGenerateRemotely(session),
+                    label = { Text("Servidor · Premium") }
+                )
             }
+
             Text("Tema o unidad se conserva como metadato; no filtra el material. Guardar en nube es una acción posterior y admite hasta 15 preguntas.")
+
             Spacer(modifier = Modifier.height(12.dp))
+
             // Nombre del cuestionario
             Text(
                 text = "Nombre del cuestionario",
@@ -170,7 +183,8 @@ fun CreateQuizScreen(
 
             OutlinedTextField(
                 value = studyState?.quizName ?: quizName,
-                onValueChange = { if (studyModel != null) studyModel.updateQuizName(it) else quizName = it },
+                onValueChange = {
+                    if (studyModel != null) studyModel.updateQuizName(it) else quizName = it },
                 enabled = !isBusy,
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("Ej.: Repaso unidad 2") },

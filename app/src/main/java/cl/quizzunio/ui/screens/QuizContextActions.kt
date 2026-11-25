@@ -39,6 +39,7 @@ internal fun QuizContextActions(id: String, title: String, authenticated: Boolea
         var renaming by remember { mutableStateOf(false) }
         var name by remember { mutableStateOf(title) }
         var error by remember { mutableStateOf<String?>(null) }
+
         QuizDeleteAction(id, title, authenticated, remote) { requestDelete ->
             Box {
                 IconButton(onClick = { expanded = true }, enabled = !state.isBusy,
@@ -60,6 +61,7 @@ internal fun QuizContextActions(id: String, title: String, authenticated: Boolea
                 }
             }
         }
+
         if (renaming) AlertDialog(
             onDismissRequest = { if (!state.isBusy) renaming = false },
             title = { Text("Renombrar cuestionario") },
@@ -74,7 +76,13 @@ internal fun QuizContextActions(id: String, title: String, authenticated: Boolea
             confirmButton = {
                 TextButton(enabled = !state.isBusy, onClick = {
                     if (name == title) renaming = false
-                    else model.renameQuiz(id, name, workspace, onComplete = { renaming = false }, onError = { error = it })
+                    else model.renameQuiz(
+                        id,
+                        name,
+                        workspace,
+                        onComplete = { renaming = false },
+                        onError = { error = it }
+                    )
                 }) { Text("Guardar") }
             },
             dismissButton = { TextButton(enabled = !state.isBusy, onClick = { renaming = false }) { Text("Cancelar") } }
