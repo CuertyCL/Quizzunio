@@ -220,11 +220,9 @@ class AnonymousImportIntegrationTest {
             ui.runOnIdle { auth.clearMessage(); auth.register("anon_${run}_ui", "anon_${run}_ui@example.com", password, password) }
             ui.waitUntil(30_000) { auth.state.value.session is SessionState.Authenticated && !study.state.value.isBusy && study.accountOwner.value != null }
             assertFalse(study.state.value.quizzes.any { it.id == source.quiz.id })
-            ui.onNodeWithText("Importar cuestionario del dispositivo").performClick()
-            ui.waitUntil(30_000) { !study.state.value.isBusy }
-            ui.onNodeWithText("Importar «${source.quiz.title}» · 2 preguntas").performScrollTo().performClick()
             val before = runBlocking { control("metrics").optInt("POST /quizzes/import") }
-            ui.onNodeWithText("Confirmar importación y subida").performClick()
+            ui.onNodeWithText("Importar cuestionario del dispositivo").assertDoesNotExist()
+            ui.runOnIdle { study.importAnonymousQuiz(source.quiz.id) }
             ui.waitUntil(30_000) { !study.state.value.isBusy && study.accountState.value.records.any { it.quiz.id == AnonymousImportIdentity.localId(source.quiz.id) && it.remote != null && it.sync == QuizSyncState.Synced } }
             val copy = study.accountState.value.records.single { it.quiz.id == AnonymousImportIdentity.localId(source.quiz.id) }
             assertEquals(source.answers, copy.answers); assertTrue(copy.quiz.completed); assertEquals(1, copy.currentIndex)

@@ -1,0 +1,8 @@
+Android JUnit 10 suites tests=55 failures=0 errors=0 skipped=0
+Maven Surefire 13 suites tests=154 failures=0 errors=0 skipped=0
+Lint advertencias 16 errores/fatales 0
+bff48db6e85c33369b252026d72eee39da228c0a413446f8df7c5a889877910b app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+b1d09717a197f34cc722290a7eb83ee2dbcab575dd0ab82c7c536d4c63ba0f8c app/build/outputs/apk/debug/app-debug.apk
+6e3daa40c0237fe8ff85acedc5abb6967d29f147e772d5e2643f3fa2bb8c70a0 app/build/outputs/apk/release/app-release-unsigned.apk
+ADB 36
+Huellas iguales True

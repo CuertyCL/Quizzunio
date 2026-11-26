@@ -241,7 +241,8 @@ class ServerIntegrationRegressionTest {
             control("/acceptance/offline/off", "POST")
         }
 
-        click("Sincronizar")
+        ui.onNodeWithText("Sincronizar").assertDoesNotExist()
+        ui.runOnIdle { study.synchronizeQuiz(record.quiz.id) }
         waitStudy(); dismissMessages()
         val synced = study.accountState.value.records.single { it.quiz.id == record.quiz.id }
         assertEquals(QuizSyncState.Synced, synced.sync)
@@ -281,9 +282,9 @@ class ServerIntegrationRegressionTest {
         val before = control("/acceptance/metrics")
 
         click("Nuevo cuestionario")
-        ui.onNodeWithText("Servidor · Premium").assertIsSelected()
+        ui.onNodeWithText("Servidor · Premium").assertDoesNotExist()
         // Sin título ni archivo: no debe abrir AiProcessingScreen ni llamar POST /quizzes.
-        click("Generar en servidor")
+        click("Generar con IA")
         ui.onNodeWithText("Generando con IA").assertDoesNotExist()
         dismissMessages()
 
@@ -300,7 +301,7 @@ class ServerIntegrationRegressionTest {
         // Material Unicode con dos preguntas y proveedor sintético local.
         repeat(13) { click("−") }
         assertEquals(2, study.state.value.questionCount)
-        click("Generar en servidor")
+        click("Generar con IA")
         ui.onNodeWithText("Generando con IA").assertExists()
         ui.waitUntil(30_000) { study.generationStage.value == GenerationStage.Validated || study.generationStage.value == GenerationStage.Failed }
         assertEquals("La generación sintética debe validarse: ${study.state.value.message}", GenerationStage.Validated, study.generationStage.value)

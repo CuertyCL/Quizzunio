@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -48,6 +50,12 @@ import androidx.compose.material3.CircularProgressIndicator
 @Composable
 fun AiProcessingScreen(
     onProcessingComplete: () -> Unit = {}
+) = AiProcessingScreen(onProcessingComplete, onHomeClick = null)
+
+@Composable
+internal fun AiProcessingScreen(
+    onProcessingComplete: () -> Unit,
+    onHomeClick: (() -> Unit)?
 ) {
     val model = LocalStudyQuizViewModel.current
     val stage = model?.generationStage?.collectAsState()?.value ?: GenerationStage.Idle
@@ -78,6 +86,7 @@ fun AiProcessingScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
@@ -107,8 +116,11 @@ fun AiProcessingScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = if (uncertain) "Si se pierde la conexión, el servidor puede completar y guardar el trabajo. Consulta la nube antes de repetirlo."
-                        else "El servidor comprobará el texto extraído antes de generar.",
+                    text = when {
+                        stage == GenerationStage.Validated -> "El cuestionario está guardado y listo para estudiar."
+                        uncertain -> "Si se pierde la conexión, el servidor puede completar y guardar el trabajo. Consulta la nube antes de repetirlo."
+                        else -> "El servidor comprobará el texto extraído antes de generar."
+                    },
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontSize = 13.sp
                     ),
@@ -211,6 +223,21 @@ fun AiProcessingScreen(
                             fontWeight = FontWeight.Bold
                         )
                     )
+                }
+                if (stage == GenerationStage.Validated && study?.isBusy == false &&
+                    study.activeQuiz != null && onHomeClick != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = onHomeClick,
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    ) {
+                        Text("Volver a Inicio", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+                    }
                 }
             }
         }

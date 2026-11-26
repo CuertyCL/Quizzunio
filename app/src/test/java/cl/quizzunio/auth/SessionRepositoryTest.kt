@@ -11,9 +11,13 @@ import org.junit.Test
 class SessionRepositoryTest {
     private class MemoryTokens : TokenStore {
         var saved: TokenPair? = null
+        var failClear = false
         override fun read(server: String) = saved
         override fun write(server: String, tokens: TokenPair) { saved = tokens }
-        override fun clear() { saved = null }
+        override fun clear() {
+            if (failClear) throw java.io.IOException("Disco no disponible")
+            saved = null
+        }
     }
     private open class Gateway : AuthGateway {
         val refreshes = AtomicInteger()
@@ -25,10 +29,19 @@ class SessionRepositoryTest {
         var logouts = 0
         var passwordChanges = 0
         var deletions = 0
+        var logins = 0
+        var registrations = 0
+        var profiles = 0
         fun pair(access: String) = TokenPair(access, "refresh-$access", Instant.parse("2026-12-01T00:00:00Z"),
             Instant.parse("2026-12-20T00:00:00Z"), Instant.parse("2027-01-01T00:00:00Z"))
-        override suspend fun login(identifier: String, password: String) = pair("first")
-        override suspend fun register(username: String, email: String, password: String) = pair("first")
+        override suspend fun login(identifier: String, password: String): TokenPair {
+            logins++
+            return pair("first")
+        }
+        override suspend fun register(username: String, email: String, password: String): TokenPair {
+            registrations++
+            return pair("first")
+        }
         override suspend fun refresh(refreshToken: String): TokenPair {
             assertEquals("refresh-first", refreshToken)
             refreshes.incrementAndGet(); delay(5)
@@ -36,6 +49,7 @@ class SessionRepositoryTest {
             return pair("second")
         }
         override suspend fun me(token: String): UserIdentity {
+            profiles++
             failMe?.let { throw it }; return UserIdentity(17, "Account", "account@example.com", UserTier.Premium)
         }
         override suspend fun logout(token: String) {
@@ -116,10 +130,74 @@ class SessionRepositoryTest {
     @Test fun unavailableIdentityNeverInventsAPlan() = runBlocking {
         val api = Gateway().apply { failMe = ApiException(503, "AUTH_UNAVAILABLE", "No disponible") }
         val store = MemoryTokens(); val session = session(api, store)
+        session.restore()
         try { session.login("Account", "password"); fail("Falta identidad") } catch (error: ApiException) { assertEquals(503, error.status) }
         assertTrue(session.state.value is SessionState.Unavailable)
         assertFalse(AccessPolicy.canGenerateRemotely(session.state.value)); assertNotNull(store.saved)
         api.failMe = null; session.restore(); assertTrue(session.state.value is SessionState.Authenticated)
+    }
+
+    @Test fun registrationAndLoginFromAnonymousRecoverProfileWithoutRepeatingPost() = runBlocking {
+        for (register in listOf(false, true)) {
+            for ((status, code) in listOf(404 to "HTTP_ERROR", 503 to "AUTH_UNAVAILABLE",
+                0 to "NETWORK_ERROR", 200 to "INVALID_RESPONSE")) {
+                val store = MemoryTokens()
+                lateinit var session: SessionRepository
+                val api = object : Gateway() {
+                    override suspend fun me(token: String): UserIdentity {
+                        assertSame(SessionState.VerifyingIdentity, session.state.value)
+                        assertNotNull(store.saved)
+                        return super.me(token)
+                    }
+                }
+                api.failMe = ApiException(status, code, "Perfil no disponible")
+                session = session(api, store)
+                session.restore()
+                try {
+                    if (register) session.register("Account", "account@example.com", "password")
+                    else session.login("Account", "password")
+                    fail("Debe propagar la causa técnica")
+                } catch (error: ApiException) { assertEquals(code, error.code) }
+                val failed = session.state.value as SessionState.Unavailable
+                assertTrue(failed.message.contains(if (register) "aceptó el registro" else "aceptó el inicio"))
+                assertFalse(AccessPolicy.canUseCloud(failed))
+                api.failMe = null
+                session.restore()
+                assertTrue(session.state.value is SessionState.Authenticated)
+                assertEquals(if (register) 0 else 1, api.logins)
+                assertEquals(if (register) 1 else 0, api.registrations)
+                assertEquals(2, api.profiles)
+                assertEquals(0, api.logouts)
+            }
+        }
+    }
+
+    @Test fun pendingIdentitySurvivesReopenAndFailedAbandonNeverPublishesAnonymous() = runBlocking {
+        val store = MemoryTokens()
+        val api = Gateway().apply { failMe = ApiException(404, "HTTP_ERROR", "Falta perfil") }
+        val first = session(api, store)
+        first.restore()
+        try { first.login("Account", "password"); fail("Debe fallar el perfil") }
+        catch (error: ApiException) { assertEquals(404, error.status) }
+        val reopened = session(api, store)
+        reopened.restore()
+        assertTrue(reopened.state.value is SessionState.Unavailable)
+        store.failClear = true
+        try { reopened.abandon(); fail("Debe informar el fallo de limpieza") }
+        catch (error: java.io.IOException) { assertNotNull(store.saved) }
+        assertTrue(reopened.state.value is SessionState.Unavailable)
+        api.failMe = null
+        reopened.restore()
+        assertTrue(reopened.state.value is SessionState.Unavailable)
+        assertEquals(2, api.profiles)
+        store.failClear = false
+        reopened.restore()
+        assertSame(SessionState.Anonymous, reopened.state.value)
+        assertNull(store.saved)
+        assertEquals(0, api.logouts)
+        reopened.login("Account", "password")
+        assertTrue(reopened.state.value is SessionState.Authenticated)
+        assertEquals(2, api.logins)
     }
 
     @Test fun expiredRestorationClearsTokensAndEmitsSessionNotice() = runBlocking {

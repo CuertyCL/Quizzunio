@@ -96,7 +96,12 @@ class KeystoreTokenStore(context: Context) : TokenStore {
         writeBytes(byteArrayOf(1) + cipher.iv + cipher.doFinal(plain))
     }
 
-    override fun clear() { writeBytes(ByteArray(0)) }
+    override fun clear() {
+        writeBytes(ByteArray(0))
+        if (file.openRead().use { it.read() } != -1) {
+            throw IOException("No se pudo confirmar que la sesión se retiró del almacenamiento.")
+        }
+    }
 
     private fun writeBytes(bytes: ByteArray) {
         val stream = file.startWrite()

@@ -1,17 +1,25 @@
 package cl.quizzunio
 
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
 import cl.quizzunio.auth.AuthViewModel
+import cl.quizzunio.auth.LocalAuthViewModel
 import cl.quizzunio.auth.SessionState
 import cl.quizzunio.core.QuizQuestion
 import cl.quizzunio.settings.AppSettings
 import cl.quizzunio.settings.ThemeMode
 import cl.quizzunio.study.*
 import cl.quizzunio.ui.theme.DestructiveBackground
+import cl.quizzunio.ui.theme.QuizzunioTheme
+import cl.quizzunio.ui.navigation.AppNavHost
 import java.util.UUID
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -20,26 +28,33 @@ import org.junit.Rule
 import org.junit.Test
 
 class QuizRenameTest {
-    @get:Rule val ui = createAndroidComposeRule<MainActivity>()
+    @get:Rule val ui = createAndroidComposeRule<ComponentActivity>()
 
     @OptIn(ExperimentalTestApi::class)
     @Test fun contextualMenuRenamesOnlyTheSelectedQuizAndKeepsItsAttempt() {
         lateinit var model: StudyQuizViewModel
-        lateinit var auth: AuthViewModel
-        ui.runOnIdle {
-            model = ViewModelProvider(ui.activity)[StudyQuizViewModel::class.java]
-            auth = ViewModelProvider(ui.activity)[AuthViewModel::class.java]
+        val storage = IsolatedStudyUiStorage(ui.activity)
+        val auth = AuthViewModel(storage.context)
+        val dark = mutableStateOf(false)
+        ui.runOnIdle { model = storage.model(ui.activity) }
+        fun render() = ui.runOnUiThread {
+            ui.activity.setContent {
+                QuizzunioTheme(darkTheme = dark.value) {
+                    CompositionLocalProvider(LocalAuthViewModel provides auth) {
+                        AppNavHost(startDestination = "home")
+                    }
+                }
+            }
         }
-        ui.waitUntil(15_000) { !model.state.value.isBusy && auth.state.value.session !is SessionState.Restoring }
+        render()
+        ui.waitUntil(15_000) { !model.state.value.isBusy && auth.state.value.session is SessionState.Anonymous }
         assertSame(SessionState.Anonymous, auth.state.value.session)
         val id = "rename-ui-${UUID.randomUUID()}"
         val questions = List(2) { QuizQuestion("¿Pregunta $it?", listOf("Á", "B", "C", "D"), 0) }
         val original = AnonymousQuizRecord(StudyQuiz(id, "Prueba de menú $id", "Tema", questions), listOf(2, null), 1)
         val other = AnonymousQuizRecord(original.quiz.copy(id = "$id-other", title = "Otro $id"))
-        val store = AnonymousQuizStore(ui.activity)
+        val store = AnonymousQuizStore(storage.context)
         val before = store.load()
-        val settings = AppSettings.getInstance(ui.activity)
-        val savedTheme = runBlocking { settings.getString(AppSettings.Keys.KEY_THEME_MODE).first() }
         store.update { it + listOf(original, other) }
         try {
             ui.runOnIdle { model.retryLocalLoad() }
@@ -49,15 +64,17 @@ class QuizRenameTest {
                 ui.onNodeWithTag("quiz-options-$id").performClick()
             }
             for (theme in listOf(ThemeMode.Light, ThemeMode.Dark)) {
-                runBlocking { settings.setThemeMode(theme) }
+                ui.runOnIdle { dark.value = theme == ThemeMode.Dark }
                 options()
                 ui.onNodeWithTag("quiz-play-title").assertDoesNotExist()
                 val rename = ui.onNodeWithText("Renombrar").assertIsDisplayed()
-                val edit = ui.onNodeWithText("Editar").assertIsNotEnabled()
+                ui.onNodeWithText("Editar").assertDoesNotExist()
                 val delete = ui.onNode(hasText("Eliminar") and hasClickAction()).assertIsDisplayed()
-                assertTrue(rename.fetchSemanticsNode().boundsInRoot.top < edit.fetchSemanticsNode().boundsInRoot.top)
-                assertTrue(edit.fetchSemanticsNode().boundsInRoot.top < delete.fetchSemanticsNode().boundsInRoot.top)
+                assertTrue(rename.fetchSemanticsNode().boundsInRoot.top < delete.fetchSemanticsNode().boundsInRoot.top)
                 assertEquals(DestructiveBackground, delete.captureToImage().toPixelMap()[2, 2])
+                val expectedSurface = if (theme == ThemeMode.Dark) cl.quizzunio.ui.theme.QuizzunioDarkSurfaceVariant
+                    else cl.quizzunio.ui.theme.QuizzunioLightSurfaceVariant
+                assertEquals(expectedSurface, rename.captureToImage().toPixelMap()[6, 6])
                 val instrumentation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
                 val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
                 java.io.File(instrumentation.targetContext.cacheDir, "gpt-quiz-context-${theme.key}.png")
@@ -111,7 +128,18 @@ class QuizRenameTest {
             ui.onNodeWithText("Todos").performClick()
             ui.onNode(hasSetTextAction()).performTextReplacement("")
             assertEquals(expected, store.load().single { it.quiz.id == id })
+            ui.onNodeWithTag("quiz-list").performScrollToNode(hasTestTag("quiz-card-${other.quiz.id}"))
+            ui.onNodeWithTag("quiz-options-${other.quiz.id}").performClick()
+            ui.onNodeWithText("Eliminar").performClick()
+            ui.onNodeWithText("Cancelar").performClick()
+            assertEquals(other, store.load().single { it.quiz.id == other.quiz.id })
+            ui.onNodeWithTag("quiz-options-${other.quiz.id}").performClick()
+            ui.onNodeWithText("Eliminar").performClick()
+            ui.onNode(hasText("Eliminar") and hasAnyAncestor(isDialog())).performClick()
+            ui.waitUntil(15_000) { !model.state.value.isBusy }
+            assertEquals(before + expected, store.load())
             ui.activityRule.scenario.recreate()
+            render()
             ui.onNodeWithTag("quiz-list").performScrollToNode(hasTestTag("quiz-card-$id"))
             ui.onNodeWithTag("quiz-card-$id").performClick()
             ui.onNodeWithTag("quiz-play-title").assertTextEquals(title)
@@ -119,10 +147,6 @@ class QuizRenameTest {
             assertEquals(original.currentIndex, model.state.value.currentQuestionIndex)
         } finally {
             store.update { records -> records.filterNot { it.quiz.id == id || it.quiz.id == other.quiz.id } }
-            runBlocking {
-                if (savedTheme.isEmpty()) settings.removePreference(AppSettings.Keys.KEY_THEME_MODE)
-                else settings.setPreference(AppSettings.Keys.KEY_THEME_MODE, savedTheme)
-            }
         }
     }
 }

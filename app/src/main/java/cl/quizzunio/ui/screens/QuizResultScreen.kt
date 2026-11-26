@@ -30,6 +30,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -100,12 +102,20 @@ fun QuizResultScreen(
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Estrella de logro
-                Text(
-                    text = "★",
-                    fontSize = 72.sp,
-                    color = if (lowResult) emphasis else MaterialTheme.extendedColors.warning
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    val showStar = result.band == ResultBand.Excellent
+                    Text(
+                        text = "★",
+                        fontSize = 72.sp,
+                        color = MaterialTheme.extendedColors.warning,
+                        modifier = if (showStar) Modifier else Modifier.alpha(0f).clearAndSetSemantics { }
+                    )
+                    if (lowResult) {
+                        Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
+                            Text("✕", fontSize = 72.sp, color = emphasis)
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 

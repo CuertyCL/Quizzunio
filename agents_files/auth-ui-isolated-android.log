@@ -1,0 +1,13 @@
+
+cl.quizzunio.AuthUiCorrectionsTest:...
+cl.quizzunio.QuizRenameTest:.
+cl.quizzunio.QuizRenameHttpTest:.
+cl.quizzunio.QuizResultsIsolatedTest:.
+cl.quizzunio.AccountPersistenceTest:.
+cl.quizzunio.AnonymousViewModelTest:.
+
+Time: 50.816
+
+OK (8 tests)
+
+

@@ -7,6 +7,12 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.graphics.Rect
 import android.view.MotionEvent
 import android.view.InputDevice
+import androidx.activity.compose.setContent
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.navigation.compose.rememberNavController
+import cl.quizzunio.ui.navigation.AppNavHost
+import cl.quizzunio.ui.theme.QuizzunioTheme
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
@@ -170,11 +176,12 @@ class Phase10AcceptanceTest {
 
     private fun createLocal(title: String, documentLabel: String) {
         click("Nuevo cuestionario")
-        click("Local")
+        val premium = AccessPolicy.canGenerateRemotely(auth.state.value.session)
+        if (!premium) click("Local")
         field(0, title)
         repeat(study.state.value.questionCount - 2) { click("−") }
         selectRealDocument(documentLabel)
-        click("Generar localmente")
+        click(if (premium) "Generar local" else "Generar localmente")
         ui.waitUntil(30_000) { study.state.value.activeQuiz?.title == title && !study.state.value.isBusy }
         ui.onNodeWithText(study.state.value.activeQuiz!!.questions.first().question).assertExists()
     }
@@ -274,7 +281,9 @@ class Phase10AcceptanceTest {
         val title = "p10-$runId-B"
         createLocal(title, "B")
         back()
-        click("Guardar en nube"); waitStudy(); dismissMessages()
+        val localId = study.state.value.quizzes.single { it.title == title }.id
+        ui.onNodeWithText("Guardar en nube").assertDoesNotExist()
+        ui.runOnIdle { study.uploadQuiz(localId) }; waitStudy(); dismissMessages()
         val record = study.accountState.value.records.single { it.quiz.title == title }
         assertNotNull(record.remote); assertEquals(user().userId, record.remote!!.userId)
         assertEquals(before.optInt("POST /quizzes") , metrics().optInt("POST /quizzes"))
@@ -326,7 +335,8 @@ class Phase10AcceptanceTest {
             assertEquals(user().userId, quiz.userId); assertEquals(-1, quiz.questions.single().currentAnswer)
         }
         assertEquals(before.optInt("real_ai_requests"), metrics().optInt("real_ai_requests"))
-        click("Actualizar nube"); waitStudy()
+        ui.onNodeWithText("Actualizar nube").assertDoesNotExist()
+        ui.runOnIdle { study.refreshCloud() }; waitStudy()
         assertTrue(study.accountState.value.records.any { it.quiz.title == "p10-$runId-D" })
     }
 
@@ -370,15 +380,16 @@ class Phase10AcceptanceTest {
         val title = "p10-$runId-F"
         val before = metrics()
         createLocal(title, "F"); back()
+        val localId = study.state.value.quizzes.single { it.title == title }.id
         control("/acceptance/drop-next-import", "POST")
-        ui.onAllNodesWithText("Guardar en nube").onLast().performScrollTo().performClick()
+        ui.runOnIdle { study.uploadQuiz(localId) }
         waitStudy()
         assertTrue("Debe informar que no recibió confirmación", study.state.value.message.orEmpty().contains("No se recibió confirmación"))
         assertNull(study.accountState.value.records.single { it.quiz.title == title }.remote)
         val committed = runBlocking { ownRepository().list(1).quizzes.filter { it.title == title } }
         assertEquals(1, committed.size)
         dismissMessages()
-        ui.onAllNodesWithText("Guardar en nube").onLast().performScrollTo().performClick(); waitStudy(); dismissMessages()
+        ui.runOnIdle { study.uploadQuiz(localId) }; waitStudy(); dismissMessages()
         val confirmed = study.accountState.value.records.single { it.quiz.title == title }
         assertEquals(committed.single().quizId, confirmed.remote?.quizId)
         assertEquals(1, runBlocking { ownRepository().list(1).quizzes.count { it.title == title } })
@@ -414,16 +425,14 @@ class Phase10AcceptanceTest {
     @Test fun hVersionedEditingPreservesDraftOnConflict() {
         val original = study.accountState.value.records.first { it.quiz.title == "p10-$runId-D" }
         val remote = original.remote!!
-        ui.onNode(hasScrollToIndexAction()).performScrollToNode(hasText(original.quiz.title))
-        // Cada tarjeta conserva su orden; se usa la posición del registro cargado para abrir su editor.
-        ui.onNode(hasText("Editar") and hasAnyAncestor(hasTestTag("quiz-actions-${original.quiz.id}"))).performScrollTo().performClick()
+        ui.onNodeWithText("Editar").assertDoesNotExist()
+        openInternalEditor(original.quiz.id)
         field(0, "p10-$runId-H-saved")
         click("Revisar y guardar cambios"); click("Guardar en servidor"); waitStudy()
         val saved = study.accountState.value.records.single { it.quiz.id == original.quiz.id }
         assertEquals(remote.version + 1, saved.remote!!.version)
         assertEquals("p10-$runId-H-saved", saved.quiz.title)
-        ui.onNode(hasScrollToIndexAction()).performScrollToNode(hasText(saved.quiz.title))
-        ui.onNode(hasText("Editar") and hasAnyAncestor(hasTestTag("quiz-actions-${saved.quiz.id}"))).performScrollTo().performClick()
+        openInternalEditor(saved.quiz.id)
         val draft = "p10-$runId-H-draft"
         field(0, draft)
         val newer = runBlocking { ownRepository().edit(saved.remote, "p10-$runId-H-external", saved.remote.questions.map {
@@ -436,6 +445,20 @@ class Phase10AcceptanceTest {
         ui.onNode(hasSetTextAction() and hasText(draft)).assertExists()
         val retained = runBlocking { ownRepository().get(newer.quizId) }
         assertEquals(newer.version, retained.version); assertEquals("p10-$runId-H-external", retained.title)
+    }
+
+    private fun openInternalEditor(id: String) {
+        ui.runOnUiThread {
+            ui.activity.setContent {
+                QuizzunioTheme {
+                    CompositionLocalProvider(LocalAuthViewModel provides auth) {
+                        val nav = rememberNavController()
+                        AppNavHost(navController = nav, startDestination = "home")
+                        LaunchedEffect(nav) { nav.navigate("edit_quiz/$id") }
+                    }
+                }
+            }
+        }
     }
 
     @Test fun cPremiumRealGenerationAndLocalAlternative() {
@@ -451,11 +474,11 @@ class Phase10AcceptanceTest {
         val before = metrics()
         assertEquals("Solo se permite una generación real en todo el fixture", 0, before.optInt("real_ai_requests"))
         click("Nuevo cuestionario")
-        ui.onNodeWithText("Servidor · Premium").assertIsSelected()
+        ui.onNodeWithText("Servidor · Premium").assertDoesNotExist()
         field(0, "p10-$runId-C")
         repeat(study.state.value.questionCount - 2) { click("−") }
         selectRealDocument("C")
-        click("Generar en servidor")
+        click("Generar con IA")
         ui.waitUntil(150_000) { study.generationStage.value == GenerationStage.Validated || study.generationStage.value == GenerationStage.Failed }
         assertEquals("La única llamada IA debe devolver un cuestionario real válido: ${study.state.value.message}", GenerationStage.Validated, study.generationStage.value)
         click("Continuar al cuestionario")

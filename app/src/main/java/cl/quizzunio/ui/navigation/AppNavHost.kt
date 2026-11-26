@@ -37,7 +37,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.unit.dp
 import cl.quizzunio.study.StudyNavigationTarget
 import cl.quizzunio.ui.screens.LocalSettingsNavigation
 import cl.quizzunio.ui.screens.SettingsDestination
@@ -75,6 +84,8 @@ fun AppNavHost(
     val authModel = LocalAuthViewModel.current
     val auth = authModel?.state?.collectAsState()?.value
     val user = (auth?.session as? SessionState.Authenticated)?.user
+    val sessionBlocked = auth?.session is SessionState.Restoring ||
+        auth?.session is SessionState.VerifyingIdentity || auth?.session is SessionState.Unavailable
     val accountOwner by studyModel.accountOwner.collectAsState()
     val workspace by studyModel.workspace.collectAsState()
     val expectedWorkspace = if (user != null) AccountQuizStore(context, authModel.session.server, user.userId).workspaceKey else null
@@ -82,7 +93,7 @@ fun AppNavHost(
     var previousUserId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(user?.userId, auth?.server, auth?.session is SessionState.Anonymous) {
-        if (auth?.session is SessionState.Restoring || auth?.session is SessionState.Unavailable) return@LaunchedEffect
+        if (sessionBlocked) return@LaunchedEffect
 
         val coordinator = if (user != null)
             AccountStudyCoordinator(
@@ -101,17 +112,21 @@ fun AppNavHost(
         previousUserId = user?.userId
     }
 
-    if (auth?.session is SessionState.Restoring || auth?.session is SessionState.Unavailable) {
-        Column {
-            if (auth.session is SessionState.Restoring) {
-                CircularProgressIndicator()
-                Text("Restaurando sesión...")
-            } else {
-                Text((auth.session as SessionState.Unavailable).message)
-                TextButton(onClick = { authModel?.restore() }, enabled = !auth.busy) { Text("Reintentar restauración") }
-                TextButton(onClick = { authModel?.abandon() }, enabled = !auth.busy) { Text("Abandonar sesión local y continuar como anónimo") }
+    if (auth != null && sessionBlocked) {
+        Surface(modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(
+                Modifier.safeDrawingPadding().verticalScroll(rememberScrollState()).padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (auth.session is SessionState.Restoring || auth.session is SessionState.VerifyingIdentity) {
+                    CircularProgressIndicator()
+                    Text(if (auth.session is SessionState.VerifyingIdentity) "Verificando identidad…" else "Restaurando sesión...")
+                } else {
+                    Text((auth.session as SessionState.Unavailable).message)
+                    TextButton(onClick = { authModel?.restore() }, enabled = !auth.busy) { Text("Reintentar verificación") }
+                    TextButton(onClick = { authModel?.abandon() }, enabled = !auth.busy) { Text("Abandonar sesión local y continuar como anónimo") }
+                }
             }
-            auth.message?.let { Text(it) }
         }
         return
     }
@@ -269,6 +284,14 @@ fun AppNavHost(
                 onProcessingComplete = {
                     navController.navigate(Screen.QuizPlay.route) {
                         popUpTo(Screen.CreateQuiz.route) { inclusive = true }
+                    }
+                },
+                onHomeClick = {
+                    if (!navController.popBackStack(Screen.Home.route, inclusive = false)) {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(navController.graph.id) { inclusive = true }
+                            launchSingleTop = true
+                        }
                     }
                 }
             )

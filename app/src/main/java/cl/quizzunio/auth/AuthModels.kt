@@ -24,6 +24,8 @@ data class UserIdentity(
 sealed class SessionState {
     object Restoring : SessionState()
     object Anonymous : SessionState()
+    internal object ObtainingTokens : SessionState()
+    internal object VerifyingIdentity : SessionState()
 
     data class Authenticated(val user: UserIdentity) : SessionState()
 

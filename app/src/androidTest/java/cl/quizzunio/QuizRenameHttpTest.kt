@@ -3,7 +3,9 @@ package cl.quizzunio
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.activity.compose.setContent
+import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
@@ -30,16 +32,11 @@ import org.junit.Test
 
 /** Cliente y disco reales contra HTTP local controlado; no certifica QuizzunioServer/MariaDB. */
 class QuizRenameHttpTest {
-    @get:Rule val ui = createAndroidComposeRule<MainActivity>()
+    @get:Rule val ui = createAndroidComposeRule<ComponentActivity>()
 
     @Test fun remoteRenamePreservesIdsVersionAndAnswersAndRetainsInputAfterHttpError() {
-        val base = InstrumentationRegistry.getInstrumentation().targetContext
-        val root = File(base.noBackupFilesDir, "rename-http-${UUID.randomUUID()}").apply { mkdirs() }
-        val context = object : ContextWrapper(base) {
-            override fun getApplicationContext(): Context = this
-            override fun getNoBackupFilesDir() = root
-            override fun getSharedPreferences(name: String, mode: Int) = base.getSharedPreferences("${root.name}_$name", mode)
-        }
+        val storage = IsolatedStudyUiStorage(ui.activity)
+        val context = storage.context
         val socket = ServerSocket(0, 8, InetAddress.getByName("127.0.0.1"))
         val executor = Executors.newSingleThreadExecutor()
         val original = RemoteQuiz(81, 731, "Prueba HTTP Ñ", "2026-11-23 00:00:00.000", 3,
@@ -112,17 +109,22 @@ class QuizRenameHttpTest {
             ui.waitUntil(15_000) { auth.state.value.server == endpoint && !auth.state.value.busy }
             auth.login("rename", "PruebaLocal-123!")
             ui.waitUntil(15_000) { auth.state.value.session is SessionState.Authenticated && !auth.state.value.busy }
-            ui.runOnUiThread { ui.activity.setContent {
-                QuizzunioTheme { CompositionLocalProvider(LocalAuthViewModel provides auth) { AppNavHost(startDestination = "home") } }
-            } }
-            val model = ViewModelProvider(ui.activity)[StudyQuizViewModel::class.java]
+            lateinit var model: StudyQuizViewModel
+            ui.runOnIdle { model = storage.model(ui.activity) }
+            ui.setContent {
+                QuizzunioTheme {
+                    CompositionLocalProvider(LocalAuthViewModel provides auth, LocalContext provides context) {
+                        AppNavHost(startDestination = "home")
+                    }
+                }
+            }
             ui.waitUntil(15_000) { !model.state.value.isBusy && model.accountState.value.records.any { it.remote?.quizId == 81L } }
             ui.runOnIdle { assertTrue(model.selectQuiz("remote-81")); model.nextQuestion() }
             ui.waitUntil(15_000) { !model.state.value.isBusy }
             val before = model.accountState.value.records.single()
             ui.onNodeWithTag("quiz-list").performScrollToNode(hasTestTag("quiz-card-remote-81"))
             ui.onNodeWithTag("quiz-options-remote-81").performClick()
-            ui.onNode(hasText("Editar") and hasAnyAncestor(isPopup())).assertIsNotEnabled()
+            ui.onNodeWithText("Editar").assertDoesNotExist()
             ui.onNodeWithText("Renombrar").performClick()
             val title = "Título remoto ñ漢😀 e\u0301"
             ui.onNode(hasSetTextAction() and hasAnyAncestor(isDialog())).performTextReplacement(title)
@@ -136,7 +138,7 @@ class QuizRenameHttpTest {
             ui.onNodeWithText("Renombrar cuestionario").assertDoesNotExist()
             val expected = before.copy(quiz = before.quiz.copy(title = title), remote = original.copy(title = title, version = 4))
             assertEquals(expected, model.accountState.value.records.single())
-            assertEquals(listOf(expected), AccountQuizStore(base, endpoint, 731).load())
+            assertEquals(listOf(expected), AccountQuizStore(context, endpoint, 731).load())
             assertEquals(expected.remote, runBlocking { RemoteQuizRepository(auth.client, auth.session).get(81) })
             assertEquals(2, edits.get()); assertNull(requestError.get())
         } finally { socket.close(); executor.shutdownNow() }

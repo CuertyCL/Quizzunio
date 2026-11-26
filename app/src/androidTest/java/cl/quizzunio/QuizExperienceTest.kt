@@ -22,6 +22,7 @@ import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.activity.compose.setContent
+import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.toPixelMap
 import cl.quizzunio.ui.screens.QuizResultScreen
@@ -88,7 +89,7 @@ class QuizExperienceTest {
             ui.onNodeWithText("Eliminar del dispositivo").assertDoesNotExist()
             card(partial)
             deleteAction(partial).performClick()
-            ui.onNodeWithText("Editar").assertIsNotEnabled()
+            ui.onNodeWithText("Editar").assertDoesNotExist()
             ui.onNode(hasText("Eliminar") and hasClickAction()).performClick()
             ui.onNodeWithTag("quiz-play-title").assertDoesNotExist()
             ui.onNodeWithText("Cancelar").performClick()
@@ -143,34 +144,6 @@ class QuizExperienceTest {
             assertEquals(existing, store.load().filterNot { it.quiz.id in ids })
         } finally {
             store.update { records -> records.filterNot { it.quiz.id in ids } }
-        }
-    }
-
-    @OptIn(ExperimentalTestApi::class)
-    @Test fun resultMessagesAndRingColorsUseTheSameBandInBothThemes() {
-        val dark = mutableStateOf(false)
-        val correct = mutableStateOf(0)
-        ui.runOnUiThread {
-            ui.activity.setContent {
-                QuizzunioTheme(darkTheme = dark.value) {
-                    QuizResultScreen(correctAnswers = correct.value, totalQuestions = 50)
-                }
-            }
-        }
-        for (darkMode in listOf(false, true)) {
-            for ((score, heading) in listOf(0 to "¡Sigue practicando!", 20 to "¡Buen trabajo!", 35 to "¡Excelente!", 50 to "¡Excelente!")) {
-                ui.runOnIdle { dark.value = darkMode; correct.value = score }
-                ui.onNodeWithText(heading).assertExists()
-                ui.onNodeWithText("${score * 2}%").assertExists()
-                val scoreRing = ui.onNodeWithTag("quiz-result-score").performScrollTo().captureToImage().toPixelMap()
-                val expected = when {
-                    score == 0 && darkMode -> QuizzunioDarkError
-                    score == 0 -> StudyRedLight
-                    darkMode -> QuizzunioSuccessDark
-                    else -> StudyGreenLight
-                }
-                assertTrue((0..(scoreRing.height / 10)).any { y -> scoreRing[scoreRing.width / 2, y] == expected })
-            }
         }
     }
 
@@ -281,5 +254,57 @@ class QuizExperienceTest {
             .outputStream().use { output ->
                 check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output))
             }
+    }
+}
+
+class QuizResultsIsolatedTest {
+    @get:Rule val ui = createAndroidComposeRule<ComponentActivity>()
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test fun resultMessagesAndRingColorsUseTheSameBandInBothThemes() {
+        val dark = mutableStateOf(false)
+        val correct = mutableStateOf(0)
+        ui.runOnUiThread {
+            ui.activity.setContent {
+                QuizzunioTheme(darkTheme = dark.value) {
+                    QuizResultScreen(correctAnswers = correct.value, totalQuestions = 50)
+                }
+            }
+        }
+        for (darkMode in listOf(false, true)) {
+            var layout: List<androidx.compose.ui.geometry.Rect>? = null
+            for ((score, heading) in listOf(0 to "¡Sigue practicando!", 20 to "¡Buen trabajo!", 35 to "¡Excelente!", 50 to "¡Excelente!")) {
+                ui.runOnIdle { dark.value = darkMode; correct.value = score }
+                ui.onNodeWithText(heading).assertExists()
+                ui.onNodeWithText("${score * 2}%").assertExists()
+                if (score >= 35) ui.onNodeWithText("★").assertIsDisplayed()
+                else ui.onNodeWithText("★").assertDoesNotExist()
+                if (score == 0) ui.onNodeWithText("✕").assertIsDisplayed()
+                else ui.onNodeWithText("✕").assertDoesNotExist()
+                val positions = listOf(
+                    ui.onNodeWithText("Has completado el cuestionario").fetchSemanticsNode().boundsInRoot,
+                    ui.onNodeWithTag("quiz-result-score").fetchSemanticsNode().boundsInRoot
+                )
+                layout?.let { assertEquals(it, positions) }
+                layout = positions
+                val scoreRing = ui.onNodeWithTag("quiz-result-score").performScrollTo().captureToImage().toPixelMap()
+                val expected = when {
+                    score == 0 && darkMode -> QuizzunioDarkError
+                    score == 0 -> StudyRedLight
+                    darkMode -> QuizzunioSuccessDark
+                    else -> StudyGreenLight
+                }
+                assertTrue((0..(scoreRing.height / 10)).any { y -> scoreRing[scoreRing.width / 2, y] == expected })
+                if (score != 50) {
+                    val instrumentation = InstrumentationRegistry.getInstrumentation()
+                    val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+                    val mode = if (darkMode) "dark" else "light"
+                    java.io.File(instrumentation.targetContext.cacheDir, "auth-ui-result-$mode-$score.png")
+                        .outputStream().use { output ->
+                            check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output))
+                        }
+                }
+            }
+        }
     }
 }

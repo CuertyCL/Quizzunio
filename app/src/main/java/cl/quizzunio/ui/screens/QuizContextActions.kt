@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import cl.quizzunio.study.LocalStudyQuizViewModel
 import cl.quizzunio.ui.theme.studyColors
+import cl.quizzunio.ui.theme.QuizCardShape
 
 /** Estado del menú ligado al ID y al espacio completo; nunca al índice visible. */
 @Composable
@@ -47,11 +48,16 @@ internal fun QuizContextActions(id: String, title: String, authenticated: Boolea
                     Icon(Icons.Default.MoreHoriz, contentDescription = "Opciones del cuestionario",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                    shape = QuizCardShape,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    tonalElevation = 0.dp
+                ) {
                     DropdownMenuItem(text = { Text("Renombrar") }, enabled = !state.isBusy, onClick = {
                         expanded = false; name = title; error = null; renaming = true
                     })
-                    DropdownMenuItem(text = { Text("Editar") }, enabled = false, onClick = {})
                     val colors = MaterialTheme.studyColors
                     DropdownMenuItem(text = { Text("Eliminar") }, enabled = !state.isBusy,
                         modifier = Modifier.background(colors.destructive),

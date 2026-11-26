@@ -91,9 +91,10 @@ fun CreateQuizScreen(
     val authModel = LocalAuthViewModel.current
     val auth = authModel?.state?.collectAsState()?.value
     val session = auth?.session ?: SessionState.Anonymous
+    val premium = AccessPolicy.canGenerateRemotely(session)
     var source by remember((session as? SessionState.Authenticated)?.user) { mutableStateOf(AccessPolicy.defaultSource(session)) }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        studyModel?.importDocuments(uris, forServer = source == GenerationSource.Server)
+        studyModel?.importDocuments(uris, forServer = premium || source == GenerationSource.Server)
     }
     BackHandler(enabled = isBusy) { }
     var quizName by remember { mutableStateOf("") }
@@ -148,9 +149,10 @@ fun CreateQuizScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
-            Text(if (session is SessionState.Authenticated) "${session.user.tier.name} · ${if (source == GenerationSource.Local) "Generación local" else "Generación en servidor"} · 1–15 preguntas"
+            Text(if (premium) "Premium · 1–15 preguntas"
+                else if (session is SessionState.Authenticated) "${session.user.tier.name} · ${if (source == GenerationSource.Local) "Generación local" else "Generación en servidor"} · 1–15 preguntas"
                 else "Generación local · Cuestionarios y respuestas guardados en este dispositivo.")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!premium) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = source == GenerationSource.Local,
                     onClick = { source = GenerationSource.Local },
@@ -449,7 +451,7 @@ fun CreateQuizScreen(
                 Button(
                     onClick = {
                         authModel?.interaction()
-                        if (source == GenerationSource.Server) onGenerateAiClick()
+                        if (!premium && source == GenerationSource.Server) onGenerateAiClick()
                         else if (studyModel != null) studyModel.generateQuiz(onSaveDraftClick)
                         else onSaveDraftClick()
                     },
@@ -465,7 +467,12 @@ fun CreateQuizScreen(
                     )
                 ) {
                     Text(
-                        text = if (isBusy) "Procesando..." else if (source == GenerationSource.Server) "Generar en servidor" else "Generar localmente",
+                        text = when {
+                            isBusy -> "Procesando..."
+                            premium -> "Generar local"
+                            source == GenerationSource.Server -> "Generar en servidor"
+                            else -> "Generar localmente"
+                        },
                         textAlign = TextAlign.Center,
                         maxLines = 2,
                         style = MaterialTheme.typography.bodyMedium.copy(
@@ -475,8 +482,15 @@ fun CreateQuizScreen(
                 }
 
                 Button(
-                    onClick = { source = if (source == GenerationSource.Server) GenerationSource.Local else GenerationSource.Server },
-                    enabled = !isBusy && AccessPolicy.canGenerateRemotely(session),
+                    onClick = {
+                        if (premium) {
+                            authModel?.interaction()
+                            onGenerateAiClick()
+                        } else {
+                            source = if (source == GenerationSource.Server) GenerationSource.Local else GenerationSource.Server
+                        }
+                    },
+                    enabled = !isBusy && premium,
                     modifier = Modifier
                         .weight(1.2f)
                         .height(48.dp),
@@ -487,7 +501,8 @@ fun CreateQuizScreen(
                     )
                 ) {
                     Text(
-                        text = if (source == GenerationSource.Server) "Usar generador local" else "Usar IA Premium ✦",
+                        text = if (premium) "Generar con IA"
+                            else if (source == GenerationSource.Server) "Usar generador local" else "Usar IA Premium ✦",
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontWeight = FontWeight.Bold
                         )

@@ -1,6 +1,9 @@
 package cl.quizzunio.ui.screens
 
 import cl.quizzunio.ui.theme.studyColors
+import cl.quizzunio.ui.theme.QuizCardShape
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -75,6 +78,7 @@ data class QuizItem(
  * Maqueta: docs/maquetas/claro/04_Inicio_cuestionarios.drawio y docs/maquetas/oscuro/04_Inicio_cuestionarios.drawio
  */
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun QuizHomeScreen(
     onCreateQuizClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
@@ -139,8 +143,9 @@ fun QuizHomeScreen(
             }
         }
     ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 20.dp)
+        val list: @Composable () -> Unit = {
+          LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)
                 .testTag("quiz-list"),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -153,14 +158,9 @@ fun QuizHomeScreen(
                     if (studyState?.isBusy == true || account?.busy == true) CircularProgressIndicator()
                     if (user == null) TextButton(onClick = { studyModel?.retryLocalLoad() }, enabled = studyState?.isBusy != true) { Text("Volver a leer cuestionarios del dispositivo") }
                     if (user != null) {
-                        AnonymousImportActions()
-                        Row {
-                            TextButton(onClick = { studyModel?.refreshCloud() }, enabled = studyState?.isBusy != true) { Text("Actualizar nube") }
-                            TextButton(onClick = { studyModel?.refreshCloud(true) }, enabled = studyState?.isBusy != true && account?.hasMore == true) { Text("Cargar más") }
-                        }
                         account?.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                         if (account?.generationUncertain == true) {
-                            Text("La generación anterior no tiene confirmación. Actualiza la nube y revisa todos los resultados antes de repetirla.")
+                            Text("La generación anterior no tiene confirmación. Desliza la lista hacia abajo para actualizarla y revisa los resultados antes de repetirla.")
                             TextButton(onClick = { studyModel?.confirmGenerationReconciled() }, enabled = account.page > 0 && account.error == null) { Text("Revisé la nube y concilié la generación") }
                         }
                     }
@@ -264,8 +264,21 @@ fun QuizHomeScreen(
                             authenticated = user != null, remote = record?.remote != null)
                     }
                 )
-                record?.let { AccountQuizActions(it, showDelete = false) }
             }
+            if (user != null && account?.hasMore == true && account.page > 0) item {
+                TextButton(onClick = { studyModel?.refreshCloud(true) },
+                    enabled = studyState?.isBusy != true && !account.busy) { Text("Cargar más") }
+            }
+          }
+        }
+        if (user == null) {
+            Box(Modifier.fillMaxSize().padding(innerPadding)) { list() }
+        } else {
+            PullToRefreshBox(
+                isRefreshing = account?.busy == true,
+                onRefresh = { studyModel?.refreshCloud() },
+                modifier = Modifier.fillMaxSize().padding(innerPadding)
+            ) { list() }
         }
     }
 }
@@ -287,7 +300,7 @@ private fun QuizCard(
             .fillMaxWidth()
             .testTag("quiz-card-${quiz.id}")
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
+        shape = QuizCardShape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )

@@ -20,6 +20,8 @@ class SessionRepository(private val api: AuthGateway, private val store: TokenSt
     private val mutableSessionNotice = MutableStateFlow<String?>(null)
     val sessionNotice: StateFlow<String?> = mutableSessionNotice.asStateFlow()
     private var lastActivityNanos: Long? = null
+    private var cleanupPending = false
+    private var identityRecoveryMessage = "No se pudo verificar la identidad de la sesión guardada."
 
     fun clearSessionNotice() { mutableSessionNotice.value = null }
 
@@ -27,49 +29,67 @@ class SessionRepository(private val api: AuthGateway, private val store: TokenSt
         mutableState.value = SessionState.Restoring
 
         try {
-            tokens = withContext(Dispatchers.IO) {
-                store.read(server)
+            if (cleanupPending) {
+                abandonLocked()
+                return@withLock
             }
-
-            if (tokens == null)
-                mutableState.value = SessionState.Anonymous
-            else
-                establishIdentity()
+            tokens = withContext(Dispatchers.IO) { store.read(server) }
+            if (tokens == null) mutableState.value = SessionState.Anonymous
+            else establishIdentity()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
-            if (error is ApiException && error.status == 401) {
-                abandonLocked()
+            if (mutableState.value is SessionState.Anonymous) {
                 mutableSessionNotice.value = "Tu sesión anterior expiró o fue revocada. Continúas en modo anónimo."
-            }
-
-            else
+            } else if (mutableState.value !is SessionState.Unavailable) {
                 mutableState.value = SessionState.Unavailable(error.message ?: "No se pudo restaurar la sesión.")
+            }
         }
     }
 
     suspend fun login(identifier: String, password: String) = mutex.withLock {
-        check(tokens == null) { "Abandona la sesión anterior antes de iniciar otra." }
-        accept(api.login(identifier, password))
-        establishIdentity()
+        obtainSession("El servidor aceptó el inicio de sesión, pero no se pudo verificar tu identidad.") {
+            api.login(identifier, password)
+        }
     }
 
     suspend fun register(username: String, email: String, password: String) = mutex.withLock {
-        check(tokens == null) { "Abandona la sesión anterior antes de registrar otra cuenta." }
-        accept(api.register(username, email, password))
+        obtainSession("El servidor aceptó el registro, pero no se pudo verificar tu identidad.") {
+            api.register(username, email, password)
+        }
+    }
+
+    private suspend fun obtainSession(profileError: String, request: suspend () -> TokenPair) {
+        check(tokens == null && !cleanupPending &&
+            (state.value is SessionState.Anonymous || state.value is SessionState.Restoring)) {
+            "Recupera o abandona la sesión anterior antes de iniciar otra."
+        }
+        val previous = state.value
+        mutableState.value = SessionState.ObtainingTokens
+        val pair = try {
+            request()
+        } catch (error: Exception) {
+            mutableState.value = previous
+            throw error
+        }
+        accept(pair)
+        identityRecoveryMessage = profileError
         establishIdentity()
     }
 
     private suspend fun establishIdentity() {
+        mutableState.value = SessionState.VerifyingIdentity
         try {
             mutableState.value = SessionState.Authenticated(authenticated {
                 api.me(it)
             })
         } catch (cancelled: CancellationException) {
+            if (mutableState.value is SessionState.VerifyingIdentity)
+                mutableState.value = SessionState.Unavailable(identityRecoveryMessage)
             throw cancelled
         } catch (error: Exception) {
-            if (mutableState.value !is SessionState.Anonymous)
-                mutableState.value = SessionState.Unavailable(error.message ?: "Identidad no disponible.")
+            if (mutableState.value is SessionState.VerifyingIdentity)
+                mutableState.value = SessionState.Unavailable(identityRecoveryMessage)
             throw error
         }
     }
@@ -158,11 +178,20 @@ class SessionRepository(private val api: AuthGateway, private val store: TokenSt
     suspend fun abandon() = mutex.withLock { abandonLocked() }
 
     private suspend fun abandonLocked() {
-        tokens = null
-        lastActivityNanos = null
-        mutableState.value = SessionState.Anonymous
-        withContext(Dispatchers.IO) {
-            store.clear()
+        cleanupPending = true
+        mutableState.value = SessionState.Unavailable("Retirando la sesión de este dispositivo…")
+        withContext(NonCancellable) {
+            try {
+                withContext(Dispatchers.IO) { store.clear() }
+            } catch (error: Exception) {
+                mutableState.value = SessionState.Unavailable("No se pudo retirar la sesión local. Reintenta antes de iniciar otra sesión.")
+                throw error
+            }
+            tokens = null
+            lastActivityNanos = null
+            cleanupPending = false
+            identityRecoveryMessage = "No se pudo verificar la identidad de la sesión guardada."
+            mutableState.value = SessionState.Anonymous
         }
     }
 
