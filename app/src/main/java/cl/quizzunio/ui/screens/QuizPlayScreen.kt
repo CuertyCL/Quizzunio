@@ -121,6 +121,9 @@ fun QuizPlayScreen(
     val totalQuestions = questions.size
     val question = questions.getOrElse(currentQuestionIndex - 1) { questions.first() }
     val correctOptionIndex = question.correctAnswer
+    // El progreso cuenta preguntas respondidas, no la posición actual
+    val answeredCount = (currentQuestionIndex - 1) + if (selectedOptionIndex != -1) 1 else 0
+    val progressPercent = if (totalQuestions > 0) (answeredCount * 100) / totalQuestions else 0
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -177,7 +180,6 @@ fun QuizPlayScreen(
                         color = MaterialTheme.colorScheme.onBackground
                     )
 
-                    val progressPercent = if (totalQuestions > 0) (currentQuestionIndex * 100) / totalQuestions else 0
                     Text(
                         text = "$progressPercent%",
                         style = MaterialTheme.typography.bodyMedium.copy(
@@ -191,7 +193,7 @@ fun QuizPlayScreen(
 
                 // Barra de progreso
                 LinearProgressIndicator(
-                    progress = { if (totalQuestions > 0) currentQuestionIndex.toFloat() / totalQuestions else 0f },
+                    progress = { if (totalQuestions > 0) progressPercent / 100f else 0f },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(8.dp),
@@ -250,6 +252,13 @@ fun QuizPlayScreen(
                                     iconColor = MaterialTheme.extendedColors.error
                                     iconText = "×"
                                 }
+                                selectedOptionIndex != -1 && index == correctOptionIndex -> {
+                                    // Respuesta correcta no elegida: se resalta para corregir de inmediato
+                                    cardBg = MaterialTheme.extendedColors.successContainer
+                                    borderStroke = BorderStroke(1.5.dp, MaterialTheme.extendedColors.success)
+                                    iconColor = MaterialTheme.extendedColors.success
+                                    iconText = "✓"
+                                }
                                 else -> {
                                     // Estado normal sin seleccionar
                                     cardBg = MaterialTheme.colorScheme.secondaryContainer
@@ -303,13 +312,8 @@ fun QuizPlayScreen(
 
                         // Retroalimentación en caso de respuesta incorrecta
                         if (selectedOptionIndex != -1 && selectedOptionIndex != correctOptionIndex) {
-                            val maxAnswerLength = 35
-                            val rawCorrectAnswer = question.answers.getOrNull(question.correctAnswer).orEmpty()
-                            val formattedCorrectAnswer = if (rawCorrectAnswer.length > maxAnswerLength) {
-                                rawCorrectAnswer.take(maxAnswerLength).trimEnd() + "..."
-                            } else {
-                                rawCorrectAnswer
-                            }
+                            // Se muestra completa: truncarla ocultaba lo que el estudiante debe repasar
+                            val formattedCorrectAnswer = question.answers.getOrNull(question.correctAnswer).orEmpty()
 
                             Spacer(modifier = Modifier.height(14.dp))
 
