@@ -459,7 +459,7 @@ fun CreateQuizScreen(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                     modifier = Modifier
                         .weight(1f)
-                        .height(48.dp),
+                        .height(min = 48.dp),
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -493,7 +493,7 @@ fun CreateQuizScreen(
                     enabled = !isBusy && premium,
                     modifier = Modifier
                         .weight(1.2f)
-                        .height(48.dp),
+                        .height(min = 48.dp),
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
@@ -501,8 +501,9 @@ fun CreateQuizScreen(
                     )
                 ) {
                     Text(
-                        text = if (premium) "Generar con IA"
-                            else if (source == GenerationSource.Server) "Usar generador local" else "Usar IA Premium ✦",
+                        text = if (premium) "Generar con IA ✦"
+                            else if (source == GenerationSource.Server) "Generar Localmente" else "Generar con IA ✦",
+						textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontWeight = FontWeight.Bold
                         )
