@@ -101,6 +101,8 @@ fun QuizHomeScreen(
         QuizItem("4", "Física - Movimiento", 12, "Completado", false)
     )
 
+    var confirmStopFollowing by remember(user?.userId, auth?.server) { mutableStateOf(false) }
+
     val attempts = if (user == null) anonymous.associate { it.quiz.id to it.answers }
         else account?.records.orEmpty().associate { it.quiz.id to it.answers }
     val sampleQuizzes = (studyState?.quizzes?.map { quiz ->
@@ -111,6 +113,18 @@ fun QuizHomeScreen(
         quiz.title.contains(searchQuery.trim(), ignoreCase = true) &&
             (selectedFilterIndex != 2 || quiz.status == "Completado")
     }.let { quizzes -> if (selectedFilterIndex == 1) quizzes.take(10) else quizzes }
+
+    if (confirmStopFollowing) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmStopFollowing = false },
+            title = { Text("Dejar de seguir la generación") },
+            text = { Text("El servidor podría completar el cuestionario. Dejar de seguirlo permite iniciar otra generación y no cancela la anterior.") },
+            confirmButton = {
+                TextButton(onClick = { confirmStopFollowing = false; studyModel?.stopFollowingGeneration() }) { Text("Confirmar") }
+            },
+            dismissButton = { TextButton(onClick = { confirmStopFollowing = false }) { Text("Cancelar") } }
+        )
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -159,7 +173,15 @@ fun QuizHomeScreen(
                     if (user == null) TextButton(onClick = { studyModel?.retryLocalLoad() }, enabled = studyState?.isBusy != true) { Text("Volver a leer cuestionarios del dispositivo") }
                     if (user != null) {
                         account?.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                        if (account?.generationUncertain == true) {
+                        if (account?.generationUncertain == true && studyModel?.hasIdentifiedGeneration == true) {
+                            Text("No se confirmó la generación. Consulta su estado sin iniciar otra.")
+                            TextButton(onClick = { studyModel.checkPendingGeneration() }, enabled = studyState?.isBusy != true) {
+                                Text("Consultar generación pendiente")
+                            }
+                            TextButton(onClick = { confirmStopFollowing = true }, enabled = studyState?.isBusy != true) {
+                                Text("Dejar de seguir la generación")
+                            }
+                        } else if (account?.generationUncertain == true) {
                             Text("La generación anterior no tiene confirmación. Desliza la lista hacia abajo para actualizarla y revisa los resultados antes de repetirla.")
                             TextButton(onClick = { studyModel?.confirmGenerationReconciled() }, enabled = account.page > 0 && account.error == null) { Text("Revisé la nube y concilié la generación") }
                         }

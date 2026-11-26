@@ -51,7 +51,7 @@ class ApiClient(val configuration: ApiConfiguration, private val transport: Http
             } catch (error: JSONException) { "HTTP_ERROR" }
 
             val message = when (response.status) {
-                400 -> "El servidor rechazó los datos de la solicitud."
+                400 -> authValidationMessage(path, code, response.body) ?: "El servidor rechazó los datos de la solicitud."
                 401 -> if (code == "INVALID_CREDENTIALS")
                     "Identificador o contraseña incorrectos." else "La sesión ya no es válida."
                 403 -> if (code == "PREMIUM_REQUIRED") "La generación con IA requiere Premium." else "El servidor no permite esta operación o requiere HTTPS."
@@ -80,6 +80,35 @@ class ApiClient(val configuration: ApiConfiguration, private val transport: Http
             throw ApiException(204, "INVALID_RESPONSE", "El servidor devolvió una confirmación inesperada.")
 
         return response.body
+    }
+
+    private fun authValidationMessage(path: String, code: String, body: String): String? {
+        if (!path.startsWith("/auth/") || code != "INVALID_REQUEST") return null
+        val error = try { JSONObject(body) } catch (_: JSONException) { return null }
+        val field = error.opt("field") as? String
+        val reason = error.opt("reason") as? String
+        val label = when (field) {
+            "username" -> "el nombre de usuario"
+            "email" -> "el correo"
+            "identifier" -> "el identificador"
+            "password" -> "la contraseña"
+            "currentPassword" -> "la contraseña actual"
+            "newPassword" -> "la nueva contraseña"
+            else -> null
+        }
+        return when {
+            field == null && reason == "MALFORMED_JSON" -> "No se pudo interpretar la solicitud."
+            field == null && reason == "UNEXPECTED_FIELD" -> "La solicitud contiene campos inesperados o repetidos."
+            label != null && reason in setOf("REQUIRED", "INVALID_TYPE") -> "Introduce un valor válido para $label."
+            field == "email" && reason == "INVALID_FORMAT" -> "Escribe un correo ASCII válido."
+            field == "username" && reason == "INVALID_LENGTH" -> "El nombre de usuario debe tener de 3 a 32 caracteres."
+            field == "username" && reason == "INVALID_CHARACTERS" -> "El nombre admite letras, números, marcas tras una letra, guion y guion bajo."
+            field in setOf("password", "newPassword") && reason == "INVALID_LENGTH" ->
+                "La contraseña debe tener de 12 a 128 caracteres Unicode."
+            field in setOf("password", "newPassword") && reason == "INVALID_CHARACTERS" ->
+                "La contraseña debe contener solo caracteres Unicode válidos."
+            else -> null
+        }
     }
 
     private companion object {

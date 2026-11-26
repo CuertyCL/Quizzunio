@@ -1,2 +1,0 @@
-51c9d2fd1f2d28fdf4f6fdc321acfdcfcf76bbc5f92ecb1dc4e1718f6080b3e8  no_backup/session.enc
-e741389dda2d8ea393ce576e307c8df62c34c85e8ab1a00825e426059dfe1178  no_backup/anonymous/quizzes.json

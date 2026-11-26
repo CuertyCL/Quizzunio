@@ -125,6 +125,15 @@ class StudyQuizViewModel(
                         }
                     }
                 }
+                if (coordinator.hasIdentifiedGeneration) {
+                    try {
+                        kotlinx.coroutines.withTimeoutOrNull(5_000) { coordinator.recoverGeneration() }
+                    } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: cl.quizzunio.network.ApiException) { /* El usuario puede consultar de nuevo. */ }
+                    catch (error: java.io.IOException) {
+                        if (version == bindingVersion) showMessage(error.message ?: "No se pudo guardar la recuperación.")
+                    }
+                }
                 try { coordinator.refresh() }
                 catch (cancelled: CancellationException) { throw cancelled }
                 catch (error: Exception) { showMessage(error.message ?: "No se pudo consultar la nube. Los datos locales siguen disponibles.") }
@@ -566,6 +575,27 @@ class StudyQuizViewModel(
 
     fun confirmGenerationReconciled() = runAccountOperation { it.confirmGenerationReconciled() }
 
+    internal val hasIdentifiedGeneration: Boolean get() = account?.hasIdentifiedGeneration == true
+
+    internal fun checkPendingGeneration(openResult: Boolean = false) = runAccountOperation { coordinator ->
+        val (status, record) = coordinator.recoverGeneration()
+        if (account !== coordinator) return@runAccountOperation
+        if (record != null && openResult) {
+            mutableState.update { it.copy(activeQuiz = record.quiz, answers = record.answers,
+                currentQuestionIndex = record.currentIndex, quizName = "", topic = "", documents = emptyList()) }
+            mutableGenerationStage.value = GenerationStage.Validated
+        } else showMessage(when (status) {
+            "COMPLETED" -> "Recuperamos el cuestionario. Ya está disponible en Inicio."
+            "PROCESSING" -> "El servidor sigue generando el cuestionario. Consulta de nuevo más tarde."
+            "UNCERTAIN" -> "El resultado sigue sin confirmarse. El servidor no repetirá esta generación automáticamente."
+            "FAILED" -> "El servidor confirmó que la generación terminó sin cuestionario."
+            "DELETED" -> "El cuestionario de esta generación fue eliminado."
+            else -> "El servidor todavía no reconoce la operación. Selecciona el material y los parámetros originales para reintentar la misma generación."
+        })
+    }
+
+    internal fun stopFollowingGeneration() = runAccountOperation { it.stopFollowingGeneration() }
+
     fun uploadQuiz(id: String) = runAccountOperation {
         val current = state.value
 
@@ -591,7 +621,7 @@ class StudyQuizViewModel(
 
         if (account == null) { showMessage("Inicia sesión para acceder a la nube."); return }
         if (initial.isBusy) return
-        if (accountState.value.generationUncertain) {
+        if (accountState.value.generationUncertain && !hasIdentifiedGeneration) {
             showMessage("Consulta primero la nube y concilia la generación sin confirmar antes de volver a generar.")
             return
         }

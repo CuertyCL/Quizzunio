@@ -224,8 +224,13 @@ internal fun AiProcessingScreen(
                         )
                     )
                 }
-                if (stage == GenerationStage.Validated && study?.isBusy == false &&
-                    study.activeQuiz != null && onHomeClick != null) {
+                if (stage == GenerationStage.Failed && uncertain && model?.hasIdentifiedGeneration == true && study?.isBusy == false) {
+                    androidx.compose.material3.TextButton(onClick = { model.checkPendingGeneration(openResult = true) }) {
+                        Text("Consultar generación pendiente")
+                    }
+                }
+                if (study?.isBusy == false && onHomeClick != null &&
+                    (stage == GenerationStage.Validated && study.activeQuiz != null || stage == GenerationStage.Failed && uncertain)) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Button(
                         onClick = onHomeClick,

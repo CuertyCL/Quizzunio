@@ -17,6 +17,8 @@ class AccountQuizStore(context: Context, server: String, private val userId: Lon
     private val directory = File(context.applicationContext.noBackupFilesDir, "accounts/$namespace/$userId")
     private val file = AtomicFile(File(directory, "quizzes.json"))
     private var generationUncertain = false
+    internal var pendingGeneration: PendingGeneration? = null
+        private set
     val workspaceKey: String get() = "$namespace/$userId"
     init { require(userId > 0) }
 
@@ -39,6 +41,10 @@ class AccountQuizStore(context: Context, server: String, private val userId: Lon
             val root = JSONObject(text)
             generationUncertain = root.optBoolean("generationUncertain", false)
             require(root.getInt("formatVersion") == 1 && root.getLong("ownerId") == userId)
+            pendingGeneration = if (root.has("pendingGeneration") && !root.isNull("pendingGeneration")) {
+                val pending = root.getJSONObject("pendingGeneration")
+                PendingGeneration(pending.getString("key"), pending.getString("fingerprint"))
+            } else null
             val entries = root.getJSONArray("records")
 
             return (0 until entries.length()).map { index ->
@@ -127,7 +133,10 @@ class AccountQuizStore(context: Context, server: String, private val userId: Lon
         val text = JSONObject().put("formatVersion", 1)
             .put("ownerId", userId)
             .put("records", entries)
-            .put("generationUncertain", generationUncertain).toString()
+            .put("generationUncertain", generationUncertain)
+            .put("pendingGeneration", pendingGeneration?.let {
+                JSONObject().put("key", it.key).put("fingerprint", it.fingerprint)
+            } ?: JSONObject.NULL).toString()
 
         require(text.length <= MAX_SNAPSHOT_CHARACTERS) { "El almacenamiento de esta cuenta supera el límite local." }
         require(text.hasValidUnicode()) { "El almacenamiento contiene una secuencia Unicode inválida." }
@@ -137,6 +146,7 @@ class AccountQuizStore(context: Context, server: String, private val userId: Lon
         val stream = file.startWrite()
         try {
             stream.write(text.toByteArray(Charsets.UTF_8))
+            stream.fd.sync()
             file.finishWrite(stream)
         } catch (error: Exception) {
             file.failWrite(stream)
@@ -151,6 +161,27 @@ class AccountQuizStore(context: Context, server: String, private val userId: Lon
         generationUncertain = value
         try { save(records) }
         catch (error: Exception) { generationUncertain = previous; throw error }
+    }
+
+    internal fun savePendingGeneration(records: List<QuizRecord>, pending: PendingGeneration?) {
+        val previous = pendingGeneration
+        val wasUncertain = generationUncertain
+        pendingGeneration = pending
+        try {
+            saveGenerationUncertain(records, pending != null)
+            val snapshot = JSONObject(file.openRead().bufferedReader(Charsets.UTF_8).use { it.readText() })
+            val stored = snapshot.optJSONObject("pendingGeneration")
+            if (pending == null && stored != null || pending != null &&
+                (stored?.optString("key") != pending.key || stored?.optString("fingerprint") != pending.fingerprint)
+            ) throw IOException("No se pudo confirmar la operación de generación en disco.")
+            val folder = android.system.Os.open(directory.path,
+                android.system.OsConstants.O_RDONLY, 0)
+            try { android.system.Os.fsync(folder) } finally { android.system.Os.close(folder) }
+        } catch (error: Exception) {
+            pendingGeneration = previous
+            generationUncertain = wasUncertain
+            throw error
+        }
     }
 
     private companion object { const val MAX_SNAPSHOT_CHARACTERS = 16_000_000 }

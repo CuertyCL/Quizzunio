@@ -19,6 +19,7 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
     private val writes = Mutex()
     private val generation = Mutex()
     private var loaded = false
+    internal val hasIdentifiedGeneration: Boolean get() = (store as? AccountQuizStore)?.pendingGeneration != null
     private val imports = Mutex()
     private val answerSync = Mutex()
     val workspaceKey: String get() = (store as? AccountQuizStore)?.workspaceKey ?: "account/$ownerId"
@@ -161,6 +162,9 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
         generate(title, text, count) {}
 
     internal suspend fun generate(title: String, text: String, count: Int, onRequest: () -> Unit): QuizRecord = generation.withLock {
+        if (store is AccountQuizStore && remote is RemoteQuizRepository) {
+            return@withLock generateIdentified(title, text, count, onRequest)
+        }
         check(!state.value.generationUncertain) { "Consulta primero la nube y concilia la generación sin confirmar antes de volver a generar." }
         var submitted = false
         val beforeSubmission: suspend () -> Unit = {
@@ -199,6 +203,62 @@ class AccountStudyCoordinator(val ownerId: Long, private val remote: RemoteQuizG
             if (submitted) setGenerationUncertain(false)
             throw invalid
         }
+    }
+
+    private suspend fun generateIdentified(title: String, text: String, count: Int, onRequest: () -> Unit): QuizRecord {
+        val snapshot = store as AccountQuizStore
+        val suggested = withContext(Dispatchers.Default) { PendingGeneration.create(title, text, count) }
+        val previous = snapshot.pendingGeneration
+        check(!state.value.generationUncertain || previous != null) { "Concilia la generación anterior antes de continuar." }
+        require(previous == null || previous.fingerprint == suggested.fingerprint) {
+            "Para reintentar la misma operación, vuelve a seleccionar el material y los parámetros originales."
+        }
+        val pending = previous ?: suggested
+        try {
+            val quiz = (remote as RemoteQuizRepository).generate(title, text, count, pending.key) {
+                if (snapshot.pendingGeneration == null) saveGeneration(pending)
+                onRequest()
+            }
+            return settleGeneration(quiz)
+        } catch (error: ApiException) {
+            if (snapshot.pendingGeneration != null && (
+                    error.code in setOf("GENERATION_FAILED", "GENERATION_DELETED", "AI_INVALID_RESPONSE",
+                                        "AI_CONTEXT_LIMIT", "AI_PROVIDER_ERROR", "AI_SCHEMA_UNSUPPORTED") ||
+                    previous == null && error.status in setOf(400, 403, 413, 415) && error.code != "INVALID_RESPONSE"
+                )) saveGeneration(null)
+            throw error
+        }
+    }
+
+    internal suspend fun recoverGeneration(): Pair<String, QuizRecord?> = generation.withLock {
+        val pending = (store as? AccountQuizStore)?.pendingGeneration ?: return@withLock "NOT_FOUND" to null
+        val result = (remote as RemoteQuizRepository).generation(pending.key)
+        val record = result.quiz?.let { settleGeneration(it) }
+        if (result.state in setOf("FAILED", "DELETED")) saveGeneration(null)
+        result.state to record
+    }
+
+    internal suspend fun stopFollowingGeneration() = generation.withLock {
+        check(hasIdentifiedGeneration)
+        saveGeneration(null)
+    }
+
+    private suspend fun settleGeneration(quiz: RemoteQuiz): QuizRecord = writes.withLock {
+        val existing = state.value.records.firstOrNull { it.remote?.quizId == quiz.quizId }
+        val record = existing ?: QuizRecord(quiz.toStudyQuiz(), ownerId, QuizOrigin.Server, quiz,
+            quiz.questions.map { it.currentAnswer.takeIf { value -> value >= 0 } }, sync = QuizSyncState.Synced)
+        saveGenerationLocked(null, listOf(record) + state.value.records.filterNot { it.quiz.id == record.quiz.id })
+        record
+    }
+
+    private suspend fun saveGeneration(pending: PendingGeneration?) = writes.withLock {
+        saveGenerationLocked(pending, state.value.records)
+    }
+
+    private suspend fun saveGenerationLocked(pending: PendingGeneration?, records: List<QuizRecord>) {
+        check(loaded)
+        withContext(Dispatchers.IO) { (store as AccountQuizStore).savePendingGeneration(records, pending) }
+        mutableState.value = state.value.copy(records = records, generationUncertain = pending != null)
     }
 
     private suspend fun setGenerationUncertain(value: Boolean) = writes.withLock {

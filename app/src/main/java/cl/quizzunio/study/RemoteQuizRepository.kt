@@ -59,7 +59,11 @@ class RemoteQuizRepository(private val client: ApiClient, private val session: S
     override suspend fun generate(title: String, text: String, count: Int): RemoteQuiz =
         generate(title, text, count) {}
 
-    internal suspend fun generate(title: String, text: String, count: Int, beforeSubmission: suspend () -> Unit): RemoteQuiz {
+    internal suspend fun generate(title: String, text: String, count: Int, beforeSubmission: suspend () -> Unit): RemoteQuiz =
+        generate(title, text, count, null, beforeSubmission)
+
+    internal suspend fun generate(title: String, text: String, count: Int, key: String?,
+                                  beforeSubmission: suspend () -> Unit): RemoteQuiz {
         check(AccessPolicy.canGenerateRemotely(session.state.value)) { "La generación en servidor requiere Premium verificado." }
         QuizContentValidator.title(title)
         require(count in 1..QuizContentValidator.MAX_QUESTIONS && text.hasNonBlankContent()) {
@@ -78,12 +82,33 @@ class RemoteQuizRepository(private val client: ApiClient, private val session: S
             beforeSubmission()
             val body = JSONObject().put("title", title).put("text", text).put("questionCount", count)
             decodeResponse {
-                document(client.request("POST", "/quizzes", 201, body, it), owner).also { quiz ->
-                    require(quiz.title == title && quiz.questions.size == count)
+                val headers = key?.let { value -> mapOf("Idempotency-Key" to value) }.orEmpty()
+                document(client.request("POST", "/quizzes", 201, body, it, headers), owner).also { quiz ->
+                    // Los reintentos con clave pueden devolver una revisión posterior del mismo cuestionario.
+                    if (key == null || quiz.version == 1L) require(quiz.title == title && quiz.questions.size == count)
                     quiz.questions.forEach { question ->
                         QuizContentValidator.question(question.question, question.options, question.correctAnswerIndex)
                     }
                 }
+            }
+        }
+    }
+
+    internal suspend fun generation(key: String): GenerationLookup {
+        require(PendingGeneration.GENERATION_KEY.matches(key))
+        val owner = owner()
+        return session.authorized { token ->
+            try {
+                val response = client.request("GET", "/quizzes/generations/$key", 200, token = token)
+                decodeResponse {
+                    val value = JSONObject(response)
+                    val state = value.stringValue("state")
+                    require(state in setOf("PROCESSING", "UNCERTAIN", "FAILED", "DELETED", "COMPLETED"))
+                    GenerationLookup(state, if (state == "COMPLETED") document(value.getJSONObject("quiz"), owner) else null)
+                }
+            } catch (error: ApiException) {
+                if (error.status == 404 && error.code == "GENERATION_NOT_FOUND") GenerationLookup("NOT_FOUND")
+                else throw error
             }
         }
     }

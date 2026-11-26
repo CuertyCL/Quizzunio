@@ -21,6 +21,7 @@ class SessionRepository(private val api: AuthGateway, private val store: TokenSt
     val sessionNotice: StateFlow<String?> = mutableSessionNotice.asStateFlow()
     private var lastActivityNanos: Long? = null
     private var cleanupPending = false
+    internal var cleanupJournal: SessionCleanupJournal? = (store as? KeystoreTokenStore)?.cleanupJournal
     private var identityRecoveryMessage = "No se pudo verificar la identidad de la sesión guardada."
 
     fun clearSessionNotice() { mutableSessionNotice.value = null }
@@ -29,13 +30,17 @@ class SessionRepository(private val api: AuthGateway, private val store: TokenSt
         mutableState.value = SessionState.Restoring
 
         try {
-            if (cleanupPending) {
+            if (cleanupPending || withContext(Dispatchers.IO) { cleanupJournal?.isPending() == true }) {
                 abandonLocked()
                 return@withLock
             }
             tokens = withContext(Dispatchers.IO) { store.read(server) }
             if (tokens == null) mutableState.value = SessionState.Anonymous
-            else establishIdentity()
+            else {
+                if (tokens?.registrationIdentity != null)
+                    identityRecoveryMessage = "El servidor aceptó el registro, pero no se pudo verificar tu identidad."
+                establishIdentity()
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -55,7 +60,15 @@ class SessionRepository(private val api: AuthGateway, private val store: TokenSt
 
     suspend fun register(username: String, email: String, password: String) = mutex.withLock {
         obtainSession("El servidor aceptó el registro, pero no se pudo verificar tu identidad.") {
-            api.register(username, email, password)
+            val pair = try {
+                api.register(username, email, password)
+            } catch (error: ApiException) {
+                if (error.status == 0 || error.status >= 500 || error.status in 200..399 ||
+                    error.status in listOf(408, 425)
+                ) throw RegistrationUnconfirmed()
+                throw error
+            }
+            pair.apply { registrationIdentity = RegistrationIdentity(username, email) }
         }
     }
 
@@ -63,6 +76,12 @@ class SessionRepository(private val api: AuthGateway, private val store: TokenSt
         check(tokens == null && !cleanupPending &&
             (state.value is SessionState.Anonymous || state.value is SessionState.Restoring)) {
             "Recupera o abandona la sesión anterior antes de iniciar otra."
+        }
+        if (state.value is SessionState.Restoring) {
+            if (withContext(Dispatchers.IO) { cleanupJournal?.isPending() == true }) abandonLocked()
+            else check(withContext(Dispatchers.IO) { store.read(server) == null }) {
+                "Recupera o abandona la sesión anterior antes de iniciar otra."
+            }
         }
         val previous = state.value
         mutableState.value = SessionState.ObtainingTokens
@@ -80,9 +99,19 @@ class SessionRepository(private val api: AuthGateway, private val store: TokenSt
     private suspend fun establishIdentity() {
         mutableState.value = SessionState.VerifyingIdentity
         try {
-            mutableState.value = SessionState.Authenticated(authenticated {
-                api.me(it)
-            })
+            val profile = authenticated { api.me(it) }
+            val current = checkNotNull(tokens)
+            current.registrationIdentity?.let { expected ->
+                if (!expected.matches(profile)) {
+                    identityRecoveryMessage = "No pudimos confirmar que el perfil corresponde a la cuenta registrada."
+                    throw ApiException(200, "REGISTRATION_IDENTITY_MISMATCH", identityRecoveryMessage)
+                }
+                val verified = TokenPair(current.accessToken, current.refreshToken, current.accessExpiresAt,
+                    current.refreshExpiresAt, current.absoluteExpiresAt)
+                withContext(Dispatchers.IO) { store.write(server, verified) }
+                tokens = verified
+            }
+            mutableState.value = SessionState.Authenticated(profile)
         } catch (cancelled: CancellationException) {
             if (mutableState.value is SessionState.VerifyingIdentity)
                 mutableState.value = SessionState.Unavailable(identityRecoveryMessage)
@@ -103,6 +132,7 @@ class SessionRepository(private val api: AuthGateway, private val store: TokenSt
     }
 
     private suspend fun <T> authenticated(action: suspend (String) -> T): T {
+        check(!cleanupPending) { "La sesión está pendiente de limpieza." }
         val current = tokens ?: throw ApiException(401, "INVALID_TOKEN", "Inicia sesión.")
 
         try {
@@ -128,6 +158,7 @@ class SessionRepository(private val api: AuthGateway, private val store: TokenSt
                 throw failure
             }
 
+            replacement.registrationIdentity = current.registrationIdentity
             accept(replacement)
 
             try {
@@ -182,7 +213,11 @@ class SessionRepository(private val api: AuthGateway, private val store: TokenSt
         mutableState.value = SessionState.Unavailable("Retirando la sesión de este dispositivo…")
         withContext(NonCancellable) {
             try {
-                withContext(Dispatchers.IO) { store.clear() }
+                withContext(Dispatchers.IO) {
+                    cleanupJournal?.begin()
+                    store.clear()
+                    cleanupJournal?.finish()
+                }
             } catch (error: Exception) {
                 mutableState.value = SessionState.Unavailable("No se pudo retirar la sesión local. Reintenta antes de iniciar otra sesión.")
                 throw error

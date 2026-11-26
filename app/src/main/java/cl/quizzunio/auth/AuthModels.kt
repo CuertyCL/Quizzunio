@@ -54,6 +54,8 @@ class TokenPair(
     val refreshExpiresAt: Instant,
     val absoluteExpiresAt: Instant
 ) {
+    internal var registrationIdentity: RegistrationIdentity? = null
+
     override fun toString(): String = "TokenPair[protegido]"
 }
 
@@ -155,3 +157,16 @@ object CredentialValidator {
         Character.ENCLOSING_MARK.toInt()
     )
 }
+
+internal class RegistrationIdentity(username: String, email: String) {
+    val username: String = Normalizer.normalize(username, Normalizer.Form.NFC)
+    val email: String = email.lowercase(java.util.Locale.ROOT)
+
+    fun matches(user: UserIdentity): Boolean =
+        username == Normalizer.normalize(user.username, Normalizer.Form.NFC) &&
+            email == user.email.lowercase(java.util.Locale.ROOT)
+}
+
+internal class RegistrationUnconfirmed : java.io.IOException(
+    "No pudimos confirmar la creación de tu cuenta. Intenta iniciar sesión con los datos utilizados. Si la cuenta no existe, puedes volver al registro."
+)

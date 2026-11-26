@@ -178,6 +178,62 @@ class UnicodeContractTest {
         fixture.transport.assertExhausted()
     }
 
+    @Test fun generationKeySurvivesReopeningAndRecoversWithoutAnotherPost() = runBlocking {
+        val fixture = Fixture()
+        fixture.login()
+        val context = isolatedContext()
+        val remote = fixture.remote
+        val original = AccountStudyCoordinator(OWNER, remote, AccountQuizStore(context, BASE_URL, OWNER))
+        original.load()
+        fixture.expectLimit(8_000_000)
+        var sentKey = ""
+        fixture.transport.expect("POST", "/quizzes") { request ->
+            sentKey = requireNotNull(request.headers["Idempotency-Key"])
+            assertEquals(SOURCE, request.json().getString("text"))
+            throw java.net.SocketTimeoutException("Synthetic response loss")
+        }
+        val lost = expectFailure<ApiException> { original.generate(TITLE, SOURCE, 1) }
+        assertEquals("NETWORK_ERROR", lost.code)
+        assertTrue(original.state.value.generationUncertain)
+
+        val reopened = AccountStudyCoordinator(OWNER, remote, AccountQuizStore(context, BASE_URL, OWNER))
+        reopened.load()
+        assertTrue(reopened.state.value.generationUncertain)
+        val expected = document()
+        fixture.transport.expect("GET", "/quizzes/generations/$sentKey") { request ->
+            assertBearer(request)
+            jsonResponse(200, JSONObject().put("state", "COMPLETED").put("quiz", QuizCodec.encode(expected)))
+        }
+        val (status, recovered) = reopened.recoverGeneration()
+        assertEquals("COMPLETED", status)
+        assertEquals(expected.quizId, recovered?.remote?.quizId)
+        assertFalse(reopened.state.value.generationUncertain)
+        val check = AccountStudyCoordinator(OWNER, remote, AccountQuizStore(context, BASE_URL, OWNER))
+        check.load()
+        assertEquals(listOf(expected.quizId), check.state.value.records.map { it.remote?.quizId })
+        assertFalse(check.state.value.generationUncertain)
+        fixture.transport.assertExhausted()
+    }
+
+    @Test fun safeAuthenticationValidationMessagesIgnoreServerTextAndUnknownFields() = runBlocking {
+        val fixture = Fixture()
+        fun response(field: String?) = JSONObject().put("code", "INVALID_REQUEST")
+            .put("message", "server-specific-data").put("reason", "INVALID_LENGTH")
+            .apply { if (field != null) put("field", field) }
+
+        for (field in listOf("username", "unexpected", null)) {
+            fixture.transport.expect("POST", "/auth/register") { jsonResponse(400, response(field)) }
+            val failure = expectFailure<ApiException> {
+                fixture.session.register("Account", EMAIL, PASSWORD)
+            }
+            assertEquals(400, failure.status)
+            assertFalse(failure.message.orEmpty().contains("server-specific-data"))
+            assertEquals(if (field == "username") "El nombre de usuario debe tener de 3 a 32 caracteres."
+                else "El servidor rechazó los datos de la solicitud.", failure.message)
+        }
+        fixture.transport.assertExhausted()
+    }
+
     @Test fun generationUsesEachAdvertisedLimitAndSendsOnlyLiteralText() = runBlocking {
         val fixture = Fixture()
         fixture.login()

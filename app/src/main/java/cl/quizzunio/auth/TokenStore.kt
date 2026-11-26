@@ -4,7 +4,11 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.AtomicFile
+import android.system.ErrnoException
+import android.system.Os
+import android.system.OsConstants
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.IOException
 import java.security.GeneralSecurityException
 import java.security.KeyStore
@@ -21,9 +25,90 @@ interface TokenStore {
     fun clear()
 }
 
+internal interface SessionCleanupJournal {
+    fun isPending(): Boolean
+    fun begin()
+    fun finish()
+}
+
+private fun fileExists(path: File): Boolean = try {
+    Os.stat(path.path)
+    true
+} catch (error: ErrnoException) {
+    if (error.errno != OsConstants.ENOENT) throw IOException("No se pudo acceder al archivo de sesión.", error)
+    false
+}
+
+private fun AtomicFile.openSessionRead(): java.io.FileInputStream? {
+    val backup = File(baseFile.path + ".bak")
+    return try {
+        val stream = openRead()
+        // Si AtomicFile no pudo restaurar una copia antigua, no uses el base residual.
+        try {
+            if (fileExists(backup)) throw IOException("No se pudo recuperar el respaldo de sesión.")
+        } catch (error: Exception) {
+            stream.close()
+            throw error
+        }
+        stream
+    } catch (error: FileNotFoundException) {
+        if (fileExists(baseFile) || fileExists(backup)) throw error
+        null
+    }
+}
+
+private fun AtomicFile.syncSessionDirectory() {
+    val directory = Os.open(baseFile.parentFile!!.path, OsConstants.O_RDONLY, 0)
+    try {
+        Os.fsync(directory)
+    } finally {
+        Os.close(directory)
+    }
+}
+
+private class AtomicSessionCleanup(directory: File) : SessionCleanupJournal {
+    private val file = AtomicFile(File(directory, "session-cleanup"))
+
+    override fun isPending(): Boolean = file.openSessionRead()?.use { stream ->
+        val marker = stream.read()
+        if (marker == -1) false
+        else {
+            if (marker != 1 || stream.read() != -1) throw IOException("La marca de limpieza de sesión está dañada.")
+            true
+        }
+    } ?: false
+
+    override fun begin() {
+        if (runCatching { isPending() }.getOrDefault(false)) {
+            file.syncSessionDirectory()
+            return
+        }
+        // Abrir antes de reemplazar para que AtomicFile trate su respaldo anterior.
+        file.openSessionRead()?.close()
+        write(true)
+    }
+
+    override fun finish() = write(false)
+
+    private fun write(pending: Boolean) {
+        val output = file.startWrite()
+        try {
+            if (pending) output.write(1)
+            output.fd.sync()
+            file.finishWrite(output)
+        } catch (error: Exception) {
+            file.failWrite(output)
+            throw error
+        }
+        if (isPending() != pending) throw IOException("No se pudo confirmar la marca de limpieza de sesión.")
+        file.syncSessionDirectory()
+    }
+}
+
 /** AES-GCM con clave no exportable y archivo excluido de copias y transferencias. */
 class KeystoreTokenStore(context: Context) : TokenStore {
     private val file = AtomicFile(File(context.applicationContext.noBackupFilesDir, "session.enc"))
+    internal val cleanupJournal: SessionCleanupJournal = AtomicSessionCleanup(context.applicationContext.noBackupFilesDir)
     private val alias = "quizzunio.session.v1"
 
     private fun key(): SecretKey {
@@ -44,10 +129,10 @@ class KeystoreTokenStore(context: Context) : TokenStore {
     }
 
     override fun read(server: String): TokenPair? {
-        if (!file.baseFile.exists()) return null
+        if (cleanupJournal.isPending()) throw IOException("La sesión está pendiente de limpieza.")
 
         try {
-            val bytes = file.openRead().use { it.readBytesLimited() }
+            val bytes = file.openSessionRead()?.use { it.readBytesLimited() } ?: return null
 
             if (bytes.isEmpty()) return null
 
@@ -68,7 +153,16 @@ class KeystoreTokenStore(context: Context) : TokenStore {
                 Instant.parse(value.getString("accessExpiry")),
                 Instant.parse(value.getString("refreshExpiry")),
                 Instant.parse(value.getString("absoluteExpiry"))
-            )
+            ).apply {
+                if (value.has("registrationIdentity")) {
+                    val identity = value.getJSONObject("registrationIdentity")
+                    val username = identity.getString("username")
+                    val email = identity.getString("email")
+                    CredentialValidator.username(username)
+                    CredentialValidator.email(email)
+                    registrationIdentity = RegistrationIdentity(username, email)
+                }
+            }
         } catch (error: GeneralSecurityException) {
             throw IOException("No se pudo descifrar la sesión. Vuelve a iniciar sesión.")
         } catch (error: IllegalArgumentException) {
@@ -79,12 +173,18 @@ class KeystoreTokenStore(context: Context) : TokenStore {
     }
 
     override fun write(server: String, tokens: TokenPair) {
+        check(!cleanupJournal.isPending()) { "La sesión está pendiente de limpieza." }
         val plain = JSONObject().put("server", server)
             .put("access", tokens.accessToken)
             .put("refresh", tokens.refreshToken)
             .put("accessExpiry", tokens.accessExpiresAt.toString())
             .put("refreshExpiry", tokens.refreshExpiresAt.toString())
             .put("absoluteExpiry", tokens.absoluteExpiresAt.toString())
+            .apply {
+                tokens.registrationIdentity?.let { identity ->
+                    put("registrationIdentity", JSONObject().put("username", identity.username).put("email", identity.email))
+                }
+            }
             .toString()
             .toByteArray(Charsets.UTF_8)
 
@@ -97,8 +197,10 @@ class KeystoreTokenStore(context: Context) : TokenStore {
     }
 
     override fun clear() {
+        // Recuperar primero cualquier respaldo legado para que no pueda desplazar el tombstone.
+        file.openSessionRead()?.close()
         writeBytes(ByteArray(0))
-        if (file.openRead().use { it.read() } != -1) {
+        if (file.openSessionRead()?.use { it.read() } != -1) {
             throw IOException("No se pudo confirmar que la sesión se retiró del almacenamiento.")
         }
     }
@@ -108,11 +210,16 @@ class KeystoreTokenStore(context: Context) : TokenStore {
 
         try {
             stream.write(bytes)
+            stream.fd.sync()
             file.finishWrite(stream)
         } catch (error: Exception) {
             file.failWrite(stream)
             throw error
         }
+        if (file.openSessionRead()?.use { it.readBytesLimited().contentEquals(bytes) } != true) {
+            throw IOException("No se pudo confirmar la escritura de la sesión.")
+        }
+        file.syncSessionDirectory()
     }
 
     private fun java.io.InputStream.readBytesLimited(): ByteArray {

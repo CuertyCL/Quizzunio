@@ -36,6 +36,10 @@ class AuthViewModel(context: Context) : ViewModel() {
     private var observer: Job? = null
     private var noticeObserver: Job? = null
 
+    private val mutableRegistrationRecovery = MutableStateFlow<String?>(null)
+    internal val registrationRecovery = mutableRegistrationRecovery.asStateFlow()
+    internal fun clearRegistrationRecovery() { mutableRegistrationRecovery.value = null }
+
     init {
         observeSession()
         runOperation { session.restore() }
@@ -186,11 +190,14 @@ class AuthViewModel(context: Context) : ViewModel() {
             it.copy(busy = true, message = null)
         }
 
+        clearRegistrationRecovery()
         scope.launch {
             try {
                 block()
             } catch (cancelled: CancellationException) {
                 throw cancelled
+            } catch (error: RegistrationUnconfirmed) {
+                mutableRegistrationRecovery.value = error.message
             } catch (error: Exception) {
                 showMessage(error.message ?: "La operación no pudo completarse.")
             } finally {

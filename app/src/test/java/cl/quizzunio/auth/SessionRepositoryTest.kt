@@ -200,6 +200,106 @@ class SessionRepositoryTest {
         assertEquals(2, api.logins)
     }
 
+    @Test fun abandonmentSurvivesRepositoryRecreationAndBlocksRefresh() = runBlocking {
+        class Journal : SessionCleanupJournal {
+            var pending = false
+            var failBegin = false
+            var failFinish = false
+            override fun isPending() = pending
+            override fun begin() {
+                if (failBegin) throw java.io.IOException("No se puede guardar la intención")
+                pending = true
+            }
+            override fun finish() {
+                if (failFinish) throw java.io.IOException("Interrupción al terminar")
+                pending = false
+            }
+        }
+        val api = Gateway()
+        val store = MemoryTokens()
+        val journal = Journal()
+        fun reopen() = session(api, store).apply { cleanupJournal = journal }
+        val first = reopen()
+        first.login("Account", "password")
+        journal.failBegin = true
+        assertTrue(runCatching { first.abandon() }.exceptionOrNull() is java.io.IOException)
+        assertFalse(journal.pending)
+        assertNotNull(store.saved)
+        assertTrue(first.state.value is SessionState.Unavailable)
+
+        journal.failBegin = false
+        store.failClear = true
+        first.restore()
+        assertTrue(journal.pending)
+        val second = reopen()
+        second.restore()
+        assertTrue(second.state.value is SessionState.Unavailable)
+        assertTrue(runCatching { second.authorized { fail("No se debe usar el par") } }.isFailure)
+        assertEquals(1, api.profiles)
+        assertEquals(0, api.refreshes.get())
+
+        store.failClear = false
+        journal.failFinish = true
+        second.restore()
+        assertNull(store.saved)
+        assertTrue(journal.pending)
+        assertTrue(second.state.value is SessionState.Unavailable)
+        journal.failFinish = false
+        val third = reopen()
+        third.restore()
+        assertSame(SessionState.Anonymous, third.state.value)
+        assertFalse(journal.pending)
+        assertEquals(0, api.logouts)
+        third.login("Account", "password")
+        assertTrue(third.state.value is SessionState.Authenticated)
+    }
+
+    @Test fun verifiesRegisteredIdentityOnRetryAndAfterReopening() = runBlocking {
+        var profile = UserIdentity(17, "josé", "account@example.com", UserTier.Free)
+        val api = object : Gateway() {
+            override suspend fun me(token: String): UserIdentity = profile
+        }
+        val store = MemoryTokens()
+        val first = session(api, store)
+        val error = runCatching { first.register("Jose\u0301", "Account@EXAMPLE.COM", "password") }.exceptionOrNull() as ApiException
+        assertEquals("REGISTRATION_IDENTITY_MISMATCH", error.code)
+        assertNotNull(store.saved?.registrationIdentity)
+        profile = profile.copy(username = "José", email = "other@example.com")
+        val reopened = session(api, store)
+        reopened.restore()
+        assertTrue(reopened.state.value is SessionState.Unavailable)
+        profile = profile.copy(email = "account@example.com")
+        reopened.restore()
+        assertEquals(profile, (reopened.state.value as SessionState.Authenticated).user)
+        assertNull(store.saved?.registrationIdentity)
+        assertEquals(1, api.registrations)
+        assertEquals(0, api.logouts)
+    }
+
+    @Test fun uncertainRegisterOffersLoginWithoutRetryButDefinitiveErrorsArePreserved() = runBlocking {
+        for ((status, code) in listOf(0 to "NETWORK_ERROR", 200 to "INVALID_RESPONSE", 504 to "HTTP_ERROR",
+            400 to "INVALID_REQUEST", 409 to "IDENTITY_CONFLICT")) {
+            var requests = 0
+            val api = object : Gateway() {
+                override suspend fun register(username: String, email: String, password: String): TokenPair {
+                    requests++
+                    throw ApiException(status, code, "Registro")
+                }
+            }
+            val store = MemoryTokens()
+            val repository = session(api, store)
+            repository.restore()
+            val result = runCatching { repository.register("Account", "account@example.com", "password") }
+            if (status in listOf(400, 409)) assertEquals(code, (result.exceptionOrNull() as ApiException).code)
+            else assertTrue(result.exceptionOrNull() is RegistrationUnconfirmed)
+            assertSame(SessionState.Anonymous, repository.state.value)
+            assertNull(store.saved)
+            repository.login("Account", "password")
+            assertTrue(repository.state.value is SessionState.Authenticated)
+            assertEquals(1, requests)
+        }
+    }
+
     @Test fun expiredRestorationClearsTokensAndEmitsSessionNotice() = runBlocking {
         val api = Gateway().apply {
             failMe = ApiException(401, "INVALID_TOKEN", "Expirado")

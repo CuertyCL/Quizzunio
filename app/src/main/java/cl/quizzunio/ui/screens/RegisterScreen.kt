@@ -57,6 +57,8 @@ fun RegisterScreen(
     var confirmPassword by remember { mutableStateOf("") }
     val authModel = LocalAuthViewModel.current
     val auth = authModel?.state?.collectAsState()?.value
+    val registrationRecovery = authModel?.registrationRecovery?.collectAsState()?.value
+
     LaunchedEffect(auth?.session) {
         if (auth?.session is SessionState.Authenticated) { password = ""; confirmPassword = ""; onRegisterSuccess() }
     }
@@ -253,13 +255,23 @@ fun RegisterScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             // Enlace a Iniciar Sesión
+            registrationRecovery?.let {
+                Text(it, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
             Text(
                 text = "¿Ya tienes cuenta? Inicia sesión",
                 style = MaterialTheme.typography.bodyMedium.copy(
                     fontSize = 14.sp
                 ),
                 color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.clickable { onNavigateToLogin() }
+                modifier = Modifier.clickable {
+                    authModel?.clearRegistrationRecovery()
+                    password = ""
+                    confirmPassword = ""
+                    onNavigateToLogin()
+                }
             )
         }
     }
