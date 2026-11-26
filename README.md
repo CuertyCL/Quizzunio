@@ -1,55 +1,113 @@
 # Quizzunio
 
-Quizzunio es una aplicación Android en desarrollo que ayuda a estudiar a partir de documentos. La idea es convertir apuntes y material de clases en cuestionarios que se puedan responder de inmediato, para repasar los contenidos de una forma más activa.
+Quizzunio es una aplicación Android para estudiantes que quieren repasar apuntes y materiales de clase mediante la práctica activa. Convierte el texto de los documentos en cuestionarios de selección múltiple y permite revisar las respuestas para reforzar lo aprendido.
 
-## ¿Cómo funciona?
+## Cómo funciona
 
-1. Selecciona uno o más archivos de estudio desde el dispositivo. El proyecto contempla archivos **PDF, TXT, DOCX y PPTX** con texto legible.
-2. Elige entre 1 y 15 preguntas y genera el cuestionario.
-3. Responde las preguntas de alternativas y revisa tus resultados.
-4. Vuelve a los cuestionarios guardados en el dispositivo para seguir practicando.
+1. En **Inicio**, selecciona **Nuevo cuestionario** y adjunta uno o más archivos **PDF, TXT, DOCX o PPTX** con texto legible.
+2. Escribe un nombre, elige entre **1 y 15 preguntas** y genera el cuestionario. En Premium, **Generar local** y **Generar con IA** son acciones independientes.
+3. Responde las preguntas. Puedes volver a Inicio y retomar el intento con el progreso guardado.
+4. Al finalizar, consulta el resultado y revisa las respuestas correctas e incorrectas. Selecciona **Reintentar** para practicar de nuevo con el mismo cuestionario.
 
-La aplicación está en desarrollo: las pantallas y funcionalidades pueden cambiar mientras se completa y prueba el proyecto.
+En Inicio puedes buscar por nombre, filtrar por **Todos**, **Recientes** o **Completados**, y distinguir los cuestionarios por intentar, en progreso y completados. El menú de cada cuestionario permite renombrarlo o eliminarlo. En **Ajustes** puedes elegir el tema **Sistema**, **Claro** u **Oscuro**.
 
-Inicio distingue cuestionarios por intentar, en progreso y completados. Cada tarjeta permite eliminar el cuestionario tras una confirmación. La flecha y el retroceso de Android guardan el progreso y vuelven a Inicio.
+Con una sesión activa y conexión al servidor, Inicio carga automáticamente los cuestionarios de la cuenta. Desliza hacia abajo para actualizar la lista y selecciona **Cargar más** para ver otras páginas.
 
-En Ajustes, la configuración del servidor y la cuenta aparecen por separado. El tema sigue a Android de forma predeterminada y permite elegir Claro u Oscuro. Quizzunio mantiene visible la barra de estado y oculta la barra de navegación mientras está en primer plano. Android puede revelarla temporalmente mediante un gesto desde el borde.
+## Modalidades de uso
 
-Sin cuenta, los cuestionarios y sus respuestas se guardan en el almacenamiento privado del dispositivo y se recuperan al volver a abrir la aplicación. Iniciar sesión los mantiene separados de la cuenta; cerrar sesión vuelve al mismo espacio anónimo. No se suben automáticamente ni se incluyen en Auto Backup. Desinstalar o borrar los datos de la aplicación elimina este almacenamiento.
+| Funcionalidad | Anónimo | Free | Premium |
+| --- | --- | --- | --- |
+| Generación local | Sí | Sí | Sí |
+| Generación con IA mediante QuizzunioServer | — | — | Sí |
+| Almacenamiento local y progreso | En el espacio anónimo del dispositivo | En el espacio de la cuenta | En el espacio de la cuenta |
+| Cuestionarios asociados a la cuenta en el servidor | — | Consulta y guardado de respuestas | Consulta, guardado de respuestas y almacenamiento automático de los generados con IA |
+| Reutilización de cuestionarios | Sí | Sí | Sí |
+| Gestión de cuenta | Registro e inicio de sesión disponibles | Perfil y gestión de cuenta | Perfil y gestión de cuenta |
 
-Desde una cuenta puedes seleccionar y confirmar la importación de un cuestionario anónimo: se conserva el original, se guarda una copia de cuenta y se suben inmediatamente el cuestionario y sus respuestas. La posición y la finalización local se conservan en la copia; el servidor almacena las respuestas actuales. Las operaciones incompletas ofrecen reintento sin crear otra importación. Los históricos de hasta 50 preguntas siguen siendo legibles, pero solo se pueden subir cuestionarios que cumplan el contrato remoto de 1–15 preguntas y contenido válido.
+El registro crea una cuenta **Free**. **Premium** es una modalidad de acceso asignada por el servidor. Los cuestionarios generados localmente quedan en el dispositivo, tanto en modo anónimo como con una cuenta.
 
-## Versión gratuita: generación local
+## Generación de cuestionarios
 
-La versión en desarrollo procesa el material en el dispositivo y genera preguntas mediante reglas, sin utilizar inteligencia artificial ni servicios de generación remotos. El generador extrae frases del material, oculta conceptos y propone alternativas para completarlas.
+### Generación local
 
-La calidad de las preguntas depende del contenido y de cómo esté escrito. Conviene revisar las preguntas y sus respuestas antes de usarlas para estudiar o evaluar. Los PDF escaneados necesitan que se reconozca su texto con OCR antes de importarlos; Quizzunio no realiza ese reconocimiento actualmente. Los archivos protegidos o sin texto legible tampoco se pueden procesar.
+Android extrae el texto y aplica reglas para construir preguntas y alternativas a partir del material. La generación se realiza en el dispositivo y funciona sin servicios remotos. El resultado depende de la cantidad y la claridad del texto disponible.
 
-## Versión premium
+### Generación mediante IA
 
-Las cuentas Premium pueden elegir generación local o generación con IA en QuizzunioServer. Android extrae el texto en el dispositivo y consulta su límite de bytes UTF-8 antes de enviarlo. Las cuentas Free autenticadas pueden guardar en la nube los cuestionarios generados localmente.
+Android extrae el texto y lo envía a QuizzunioServer junto con el nombre y la cantidad de preguntas. El servidor solicita la generación al proveedor configurado, valida el resultado y lo guarda en MariaDB. Android recibe el cuestionario y permite abrirlo de inmediato o volver a Inicio para resolverlo después.
 
-Los cuestionarios conservan acentos, escrituras no latinas, símbolos y emojis. El [contrato OpenAPI](specs/openapi.json) especifica las unidades y los límites de cada campo.
+La comunicación con el proveedor de IA ocurre exclusivamente en el servidor. Si se interrumpe la conexión antes de confirmar el resultado, elige **Consultar generación pendiente** para comprobar el estado de la misma operación y recuperar el cuestionario si el servidor ya lo guardó.
 
-## Tecnologías
+## Cuentas, almacenamiento y seguridad
 
-- **Plataforma:** Android, desde Android 9 (API 28).
-- **Lenguaje:** Kotlin.
-- **Interfaz:** Jetpack Compose y Material 3.
-- **Navegación y estado:** Navigation Compose y ViewModel.
-- **Almacenamiento:** datos de los cuestionarios guardados localmente en el dispositivo.
-- **Compilación:** Gradle con Kotlin DSL.
+En **Ajustes → Cuenta** puedes iniciar sesión con tu usuario o correo, cerrar sesión, cambiar la contraseña o eliminar la cuenta. Para registrarte, selecciona **¿No tienes cuenta? Regístrate** en la pantalla de inicio de sesión. La app comprueba que el perfil corresponda a los datos del registro antes de abrir la cuenta y muestra indicaciones sobre el campo que requiere corrección cuando puede identificarlo. Si el registro queda sin confirmar, puedes pasar a **Iniciar sesión** para comprobar el acceso.
 
-## Abrir el proyecto
+Al abrir la app, esta puede recuperar la sesión desde un respaldo local válido y verifica la identidad con el servidor. Si la verificación se interrumpe, puedes reintentarla o abandonar la sesión solo en el dispositivo. Cuando el abandono queda registrado en el dispositivo, la sesión anterior permanece desactivada al volver a abrir la app.
 
-1. Clona el repositorio y abre su carpeta en Android Studio.
-2. Instala el SDK de Android 37 y permite que Android Studio sincronice las dependencias de Gradle. El proyecto configura Java 25 para el proceso de Gradle.
-3. Selecciona un dispositivo o emulador con Android 9 o superior y ejecuta el módulo `app`.
+Los cuestionarios y sus avances se guardan en el almacenamiento privado de Android. El espacio anónimo se mantiene separado de los espacios identificados por cuenta y servidor. Al cerrar sesión se recupera el acceso a los cuestionarios anónimos guardados en el dispositivo.
 
-## Estructura principal
+Los tokens de sesión se guardan cifrados con una clave protegida por Android Keystore. QuizzunioServer protege las contraseñas mediante hashes Argon2id y almacena los cuestionarios remotos en MariaDB.
 
-- `app/src/main/java/cl/quizzunio/study/`: lectura de documentos, generación local y gestión de cuestionarios.
-- `app/src/main/java/cl/quizzunio/ui/`: pantallas, navegación y tema visual.
-- `app/src/main/java/cl/quizzunio/settings/`: preferencias de la aplicación.
-- `docs/maquetas/`: diseños de las pantallas en sus versiones clara y oscura.
+## Arquitectura y tecnologías
 
+**Android** gestiona la interfaz, los documentos, la generación local, la sesión y el almacenamiento del dispositivo. Está escrito en Kotlin con arquitectura MVVM, ViewModel, Jetpack Compose, Material 3 y Navigation Compose. Usa DataStore para preferencias, Storage Access Framework para seleccionar documentos, PDFBox Android para extraer texto de PDF y Gradle con Kotlin DSL para compilar.
+
+**QuizzunioServer** es un servicio independiente escrito en Java con Javalin. Autentica y autoriza las solicitudes, valida los cuestionarios, realiza la generación con IA y administra la persistencia de cuentas, sesiones y cuestionarios en MariaDB.
+
+```mermaid
+flowchart LR
+    D["Documentos de estudio"] --> A["Quizzunio Android"]
+    A --> L["Generador local por reglas"]
+    L --> P["Almacenamiento privado del dispositivo"]
+    A -->|HTTP o HTTPS| S["QuizzunioServer"]
+    S --> I["Proveedor de IA configurado"]
+    S --> M[("MariaDB")]
+```
+
+## Compilación y ejecución
+
+- Usa un dispositivo o emulador con **Android 9** o posterior (`minSdk 28`).
+- Instala **Android SDK 37** para compilar (`compileSdk 37`). La aplicación apunta a esa misma API (`targetSdk 37`).
+- El Gradle Wrapper usa **Gradle 9.5.0** y el proyecto fija **JDK 25** para el proceso de Gradle. El código Java del módulo Android tiene compatibilidad de compilación y destino **Java 11**. Java 27 corresponde al servidor.
+
+Para ejecutar la app en Android Studio, clona el repositorio, abre su carpeta raíz, configura JDK 25 para Gradle e instala la plataforma Android SDK 37 desde SDK Manager. Sincroniza el proyecto, selecciona la configuración del módulo `app` y ejecútala en un dispositivo o emulador.
+
+También puedes compilar y ejecutar las pruebas unitarias desde la raíz con el Gradle Wrapper. Para usarlo desde la terminal, configura `JAVA_HOME` con el JDK y `ANDROID_HOME` con la ubicación del SDK.
+
+```bash
+./gradlew assembleDebug
+./gradlew testDebugUnitTest
+```
+
+En Windows, usa `.\gradlew.bat` con las mismas tareas. El APK de depuración se genera en `app/build/outputs/apk/debug/app-debug.apk`.
+
+## Configuración del servidor
+
+En **Ajustes → Servidor**, ingresa la URL base de una instancia compatible de QuizzunioServer. Selecciona **Aplicar servidor** y usa **Comprobar estado del servidor** para consultar la conexión. Si tienes una sesión abierta, ciérrala o abandónala localmente antes de cambiar de servidor.
+
+Usa **HTTPS** en redes no confiables. La app también admite **HTTP** para redes controladas y solicita confirmación antes de aplicar la dirección. Puedes usar el modo anónimo para generar, resolver y revisar cuestionarios locales sin configurar un servidor. El registro, el inicio de sesión, las operaciones sobre cuestionarios remotos y la generación con IA requieren conexión al servidor.
+
+Para identificar y recuperar operaciones de generación con IA, el servidor debe admitir el contrato de idempotencia y tener aplicada la migración `docs/migrations/quiz_generation.sql` de QuizzunioServer. Esta se aplica después de las migraciones anteriores de cuestionarios y antes de aceptar solicitudes con clave de idempotencia. Consulta la documentación del servidor para administrarla.
+
+## Estructura del proyecto
+
+```text
+app/
+├── src/main/
+│   ├── java/cl/quizzunio/
+│   │   ├── auth/       # Cuentas y sesiones
+│   │   ├── core/       # Modelos y utilidades de texto
+│   │   ├── network/    # Comunicación HTTP
+│   │   ├── settings/   # Preferencias
+│   │   ├── study/      # Documentos, generación y cuestionarios
+│   │   └── ui/         # Pantallas, navegación y tema
+│   └── res/
+├── src/test/           # Pruebas unitarias
+└── src/androidTest/    # Pruebas instrumentadas
+docs/maquetas/          # Diseños de las pantallas
+gradle/                 # Wrapper y catálogo de dependencias
+```
+
+## Contexto académico
+
+Quizzunio se desarrolló como proyecto académico de la asignatura **Desarrollo de Aplicaciones Móviles II**.
