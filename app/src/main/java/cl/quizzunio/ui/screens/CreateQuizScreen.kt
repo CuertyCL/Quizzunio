@@ -459,7 +459,7 @@ fun CreateQuizScreen(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                     modifier = Modifier
                         .weight(1f)
-                        .height(min = 48.dp),
+                        .height(48.dp),
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -493,7 +493,7 @@ fun CreateQuizScreen(
                     enabled = !isBusy && premium,
                     modifier = Modifier
                         .weight(1.2f)
-                        .height(min = 48.dp),
+                        .height(48.dp),
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
